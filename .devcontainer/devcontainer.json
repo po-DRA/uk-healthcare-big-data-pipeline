@@ -1,0 +1,35 @@
+{
+  "name": "UK Healthcare Big Data Pipeline",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "postCreateCommand": "pip install uv && uv sync --all-extras && uv run pre-commit install",
+  "forwardPorts": [2718, 4200],
+  "portsAttributes": {
+    "2718": {
+      "label": "Marimo notebooks",
+      "onAutoForward": "openBrowser"
+    },
+    "4200": {
+      "label": "Prefect UI",
+      "onAutoForward": "notify"
+    }
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-toolsai.jupyter",
+        "eamodio.gitlens",
+        "charliermarsh.ruff",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": ".venv/bin/python",
+        "editor.formatOnSave": true,
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff"
+        }
+      }
+    }
+  }
+}

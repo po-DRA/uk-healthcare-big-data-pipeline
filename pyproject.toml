@@ -1,0 +1,54 @@
+[project]
+name = "uk-healthcare-big-data-pipeline"
+version = "0.1.0"
+description = "A DIY big data pipeline course for healthcare students using UK open data"
+requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+dependencies = [
+  "httpx>=0.27",
+  "beautifulsoup4>=4.12",
+  "polars>=0.20",
+  "duckdb>=0.10",
+  "matplotlib>=3.8",
+  "marimo>=0.6",
+  "prefect>=3.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.0",
+  "pytest-mock>=3.12",
+  "ruff>=0.4",
+  "mypy>=1.10",
+  "pre-commit>=3.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pipeline"]
+
+[tool.ruff]
+line-length = 88
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pipeline"]
+
+[tool.mypy]
+strict = false
+ignore_missing_imports = true
+python_version = "3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "slow: marks tests that make live API calls (deselect with -m 'not slow')",
+]

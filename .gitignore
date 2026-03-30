@@ -1,0 +1,15 @@
+lake/
+*.duckdb
+outputs/
+__pycache__/
+.env
+*.pyc
+.DS_Store
+venv/
+.venv/
+.ipynb_checkpoints/
+*.egg-info/
+dist/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
