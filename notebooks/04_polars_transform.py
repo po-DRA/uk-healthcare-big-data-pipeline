@@ -7,6 +7,7 @@ app = marimo.App(title="04 · Polars Transform — Volume & Veracity")
 @app.cell
 def __():
     import marimo as mo
+
     return (mo,)
 
 
@@ -36,6 +37,7 @@ def __():
     import polars as pl
 
     from pipeline.transform import build_prescribing_df, veracity_report
+
     return build_prescribing_df, pathlib, pl, veracity_report
 
 
@@ -100,7 +102,7 @@ def __(lazy_df):
     df = lazy_df.collect()
     print(f"Collected DataFrame: {len(df):,} rows × {len(df.columns)} columns")
     print(f"Columns: {df.columns}")
-    print(f"\nSchema:")
+    print("\nSchema:")
     for col_name, dtype in df.schema.items():
         print(f"  {col_name:<20} {dtype}")
     return (df,)
@@ -117,8 +119,9 @@ def __(df):
     # Show the derived columns we added in build_prescribing_df
     print("Sample of nic_per_item and year_month columns:")
     print(
-        df.select(["drug", "date", "year_month", "actual_cost", "items", "nic_per_item"])
-        .head(8)
+        df.select(
+            ["drug", "date", "year_month", "actual_cost", "items", "nic_per_item"]
+        ).head(8)
     )
     return
 
@@ -145,7 +148,11 @@ def __(df, veracity_report):
     print()
     total = len(df)
     for row in report.iter_rows(named=True):
-        status = "✓ CLEAN" if row["null_count"] == 0 else f"⚠ {row['null_count']:,} nulls ({row['null_pct']}%)"
+        status = (
+            "✓ CLEAN"
+            if row["null_count"] == 0
+            else f"⚠ {row['null_count']:,} nulls ({row['null_pct']}%)"
+        )
         print(f"  {row['field']:<15}  {status}")
     print(f"\nTotal rows: {total:,}")
     return report, row, total
@@ -203,6 +210,7 @@ def __(LAKE_DIR, df, json, pl, pathlib):
 
     # Lazy: scan with scan_ndjson (already done above — just time a collect)
     from pipeline.transform import build_prescribing_df
+
     _t0 = time.perf_counter()
     _ = build_prescribing_df(LAKE_DIR).collect()
     lazy_time = time.perf_counter() - _t0
@@ -213,7 +221,16 @@ def __(LAKE_DIR, df, json, pl, pathlib):
     print()
     print("The lazy approach becomes dramatically faster as data grows,")
     print("because Polars can push filters down and avoid reading unused columns.")
-    return build_prescribing_df, eager_df, eager_records, eager_time, fh, json, lazy_time, time
+    return (
+        build_prescribing_df,
+        eager_df,
+        eager_records,
+        eager_time,
+        fh,
+        json,
+        lazy_time,
+        time,
+    )
 
 
 @app.cell

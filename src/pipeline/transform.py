@@ -52,7 +52,7 @@ def build_prescribing_df(lake_dir: pathlib.Path) -> pl.LazyFrame:
             pl.col("quantity").cast(pl.Float64),
         )
         .with_columns(
-            (pl.col("actual_cost") / pl.col("items"))
+            (pl.col("actual_cost") / pl.col("items").replace(0, None))
             .round(4)
             .alias("nic_per_item"),
             pl.col("date").str.slice(0, 7).alias("year_month"),

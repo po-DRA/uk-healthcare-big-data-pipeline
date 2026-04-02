@@ -7,6 +7,7 @@ app = marimo.App(title="02 · Raw Data Lake — Variety")
 @app.cell
 def __():
     import marimo as mo
+
     return (mo,)
 
 
@@ -39,6 +40,7 @@ def __():
 
     from pipeline.fetch import DRUG_CODES, fetch_nhs_pages, fetch_openprescribing
     from pipeline.lake import lake_summary, read_lake, write_lake
+
     return (
         DRUG_CODES,
         ThreadPoolExecutor,
@@ -54,7 +56,9 @@ def __():
 
 
 @app.cell
-def __(DRUG_CODES, ThreadPoolExecutor, as_completed, fetch_nhs_pages, fetch_openprescribing):
+def __(
+    DRUG_CODES, ThreadPoolExecutor, as_completed, fetch_nhs_pages, fetch_openprescribing
+):
     DRUGS = [(bnf, name) for name, bnf in DRUG_CODES.items()]
 
     fetch_jobs = []
@@ -65,8 +69,7 @@ def __(DRUG_CODES, ThreadPoolExecutor, as_completed, fetch_nhs_pages, fetch_open
     results = []
     with ThreadPoolExecutor(max_workers=8) as executor:
         future_map = {
-            executor.submit(fn, *args): (fn.__name__, args)
-            for fn, args in fetch_jobs
+            executor.submit(fn, *args): (fn.__name__, args) for fn, args in fetch_jobs
         }
         for future in as_completed(future_map):
             try:

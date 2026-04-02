@@ -11,8 +11,34 @@ No API keys required for either source.
 
 from __future__ import annotations
 
+import logging
+import os
+import re
+
 import httpx
 from bs4 import BeautifulSoup
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential_jitter,
+)
+
+_log = logging.getLogger(__name__)
+
+# Allowed characters in a drug name: lowercase letters and hyphens only.
+# Prevents path traversal and injection if drug_name is ever used in a URL or path.
+_DRUG_NAME_RE = re.compile(r"^[a-z][a-z\-]*[a-z]$")
+
+# Retry strategy: up to 3 attempts, exponential backoff (2s → 4s → 8s) plus
+# ±1s jitter to avoid thundering-herd if multiple drugs fail simultaneously.
+# Retries on transient network errors and 5xx HTTP responses.
+_RETRY = retry(
+    retry=retry_if_exception_type((httpx.RequestError, httpx.HTTPStatusError)),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential_jitter(initial=2, max=10, jitter=1),
+    reraise=True,
+)
 
 # ---------------------------------------------------------------------------
 # BNF drug codes used throughout the pipeline
@@ -37,12 +63,18 @@ _OPENPRESCRIBING_BASE = (
 )
 _NHS_BASE = "https://www.nhs.uk/medicines/{drug}/{slug}/"
 
+# Seconds before an HTTP request is abandoned.  20s is generous but appropriate
+# for NHS.uk which can be slow to respond.  Override via environment variable:
+#   HTTP_TIMEOUT=30 uv run python flows/pipeline_flow.py
+_HTTP_TIMEOUT: float = float(os.environ.get("HTTP_TIMEOUT", "20"))
+
 
 # ---------------------------------------------------------------------------
 # OpenPrescribing — structured prescribing data
 # ---------------------------------------------------------------------------
 
 
+@_RETRY
 def fetch_openprescribing(drug_bnf_code: str, drug_name: str) -> dict:
     """Fetch monthly NHS prescribing records for one drug from OpenPrescribing.
 
@@ -68,9 +100,9 @@ def fetch_openprescribing(drug_bnf_code: str, drug_name: str) -> dict:
             date, actual_cost, items, quantity, row_id, setting, ccg
     """
     url = _OPENPRESCRIBING_BASE.format(bnf_code=drug_bnf_code)
-    print(f"  → Fetching OpenPrescribing: {drug_name} ({drug_bnf_code})")
+    _log.info("Fetching OpenPrescribing: %s (%s)", drug_name, drug_bnf_code)
 
-    response = httpx.get(url, timeout=20)
+    response = httpx.get(url, timeout=_HTTP_TIMEOUT)
     response.raise_for_status()
     raw: list[dict] = response.json()
 
@@ -88,7 +120,7 @@ def fetch_openprescribing(drug_bnf_code: str, drug_name: str) -> dict:
         for item in raw
     ]
 
-    print(f"     {drug_name}: {len(records):,} records fetched")
+    _log.info("%s: %d records fetched", drug_name, len(records))
     return {
         "drug": drug_name,
         "bnf_code": drug_bnf_code,
@@ -103,6 +135,7 @@ def fetch_openprescribing(drug_bnf_code: str, drug_name: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
+@_RETRY
 def fetch_nhs_pages(drug_name: str) -> dict:
     """Fetch and parse the three NHS.uk clinical sub-pages for one drug.
 
@@ -129,8 +162,14 @@ def fetch_nhs_pages(drug_name: str) -> dict:
     404 responses are skipped with a warning — some drug/slug combinations
     do not exist on NHS.uk.
     """
+    if not _DRUG_NAME_RE.match(drug_name):
+        raise ValueError(
+            f"Invalid drug_name {drug_name!r}: must contain only lowercase letters "
+            "and hyphens (e.g. 'metformin', 'co-amoxiclav')"
+        )
+
     pages: list[dict] = []
-    print(f"  → Fetching NHS.uk pages: {drug_name}")
+    _log.info("Fetching NHS.uk pages: %s", drug_name)
 
     for slug_template in _NHS_SLUGS:
         slug = slug_template.format(drug=drug_name)
@@ -145,16 +184,16 @@ def fetch_nhs_pages(drug_name: str) -> dict:
             page_type = "interactions"
 
         try:
-            response = httpx.get(url, timeout=20, follow_redirects=True)
+            response = httpx.get(url, timeout=_HTTP_TIMEOUT, follow_redirects=True)
             if response.status_code == 404:
-                print(f"     Warning: 404 for {url} — skipping")
+                _log.warning("404 for %s — skipping", url)
                 continue
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            print(f"     Warning: HTTP {exc.response.status_code} for {url} — skipping")
+            _log.warning("HTTP %d for %s — skipping", exc.response.status_code, url)
             continue
         except httpx.RequestError as exc:
-            print(f"     Warning: Request error for {url}: {exc} — skipping")
+            _log.warning("Request error for %s: %s — skipping", url, exc)
             continue
 
         soup = BeautifulSoup(response.text, "html.parser")
@@ -202,7 +241,7 @@ def fetch_nhs_pages(drug_name: str) -> dict:
                     }
                 )
 
-    print(f"     {drug_name}: {len(pages)} sections extracted across NHS pages")
+    _log.info("%s: %d sections extracted across NHS pages", drug_name, len(pages))
     return {
         "drug": drug_name,
         "type": "nhs_pages",

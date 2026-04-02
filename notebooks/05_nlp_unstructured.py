@@ -7,6 +7,7 @@ app = marimo.App(title="05 · NLP on Clinical Text — Variety")
 @app.cell
 def __():
     import marimo as mo
+
     return (mo,)
 
 
@@ -38,6 +39,7 @@ def __():
     import polars as pl
 
     from pipeline.nlp import STOP_WORDS, extract_sections, tokenise, top_terms
+
     return STOP_WORDS, extract_sections, json, pathlib, pl, tokenise, top_terms
 
 
@@ -66,7 +68,7 @@ def __(json, pathlib):
     # Pick the first real section with non-empty text
     first_section = next(
         (p for p in nhs_payload["pages"] if p.get("text")),
-        nhs_payload["pages"][0] if nhs_payload["pages"] else {}
+        nhs_payload["pages"][0] if nhs_payload["pages"] else {},
     )
 
     print("=== RAW NHS SECTION (as stored in the lake) ===")
@@ -191,7 +193,11 @@ def __(drug_terms, pl):
         met_terms = drug_terms["metformin"]
         print("Metformin terms by page type:")
         for pt in met_terms["page_type"].unique().to_list():
-            pt_df = met_terms.filter(pl.col("page_type") == pt).sort("frequency", descending=True).head(5)
+            pt_df = (
+                met_terms.filter(pl.col("page_type") == pt)
+                .sort("frequency", descending=True)
+                .head(5)
+            )
             print(f"\n  {pt}:")
             for row in pt_df.iter_rows(named=True):
                 print(f"    {row['term']:20s} {row['frequency']}")

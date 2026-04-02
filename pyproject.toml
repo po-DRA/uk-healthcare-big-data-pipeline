@@ -13,11 +13,13 @@ dependencies = [
   "matplotlib>=3.8",
   "marimo>=0.6",
   "prefect>=3.0",
+  "tenacity>=8.2",
 ]
 
 [dependency-groups]
 dev = [
   "pytest>=8.0",
+  "pytest-cov>=5.0",
   "pytest-mock>=3.12",
   "ruff>=0.4",
   "mypy>=1.10",
@@ -52,3 +54,10 @@ testpaths = ["tests"]
 markers = [
   "slow: marks tests that make live API calls (deselect with -m 'not slow')",
 ]
+addopts = "--cov=src/pipeline --cov-report=term-missing --cov-report=xml"
+
+[tool.coverage.run]
+omit = ["tests/*"]
+
+[tool.coverage.report]
+exclude_lines = ["if __name__ == .__main__.:"]

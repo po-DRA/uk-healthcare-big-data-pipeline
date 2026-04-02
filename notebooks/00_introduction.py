@@ -7,6 +7,7 @@ app = marimo.App(title="00 · Introduction — UK Healthcare Big Data Pipeline")
 @app.cell
 def __():
     import marimo as mo
+
     return (mo,)
 
 
@@ -103,7 +104,7 @@ def __(mo):
 def __(mo):
     mo.md(
         """
-        ## Pipeline Architecture
+        ## Pipeline Architecture — Medallion Data Lake
 
         ```
         ┌─────────────────────────┐     ┌──────────────────────────────┐
@@ -118,37 +119,47 @@ def __(mo):
                     │  (8 concurrent tasks) │
                     └───────────┬───────────┘
                                 │
+        ╔═══════════════════════▼═══════════════════════════╗
+        ║  BRONZE LAYER  (lake/)                            ║  ← Variety
+        ║  lake/*/prescribing.jsonl  (raw JSONL)            ║
+        ║  lake/*/nhs_pages.json     (raw JSON)             ║
+        ║  Write-once — never modified                      ║
+        ╚═══════════════════════╦═══════════════════════════╝
+                                ║  build_silver()
                     ┌───────────▼───────────┐
-                    │     Data Lake         │   ← Variety (two formats)
-                    │  lake/*/prescribing   │
-                    │  lake/*/nhs_pages     │
-                    └──────┬────────┬───────┘
-                           │        │
-              ┌────────────▼──┐  ┌──▼──────────────┐
-              │    DuckDB     │  │  BeautifulSoup   │   ← Variety (SQL + NLP)
-              │  (SQL on      │  │  + Counter NLP   │
-              │   raw files)  │  └──────┬───────────┘
-              └──────┬────────┘         │
-                     │         ┌────────▼───────────┐
-              ┌──────▼──────┐  │  Polars LazyFrame  │   ← Volume + Veracity
-              │  SQL Views  │  │  (lazy evaluation) │
-              └──────┬──────┘  └────────┬───────────┘
-                     │                  │
-                     └──────────┬───────┘
-                                │
-                    ┌───────────▼───────────┐
-                    │  DuckDB JOIN          │   ← Structured ⋈ Unstructured
-                    │  + Parquet export     │
+                    │  Polars LazyFrame     │   ← Volume + Veracity
+                    │  (type cast, verify)  │
                     └───────────┬───────────┘
                                 │
-                    ┌───────────▼───────────┐
-                    │    matplotlib 2×2     │   ← Clinical insights
-                    │    outputs/           │
-                    └───────────────────────┘
+        ╔═══════════════════════▼═══════════════════════════╗
+        ║  SILVER LAYER  (silver.prescribing in DuckDB)     ║  ← Veracity
+        ║  Typed, cleaned, null-checked                     ║
+        ║  + nic_per_item + year_month + ingested_at        ║
+        ╚═══════════════════════╦═══════════════════════════╝
+                                ║  build_gold()
+        ╔═══════════════════════▼═══════════════════════════╗
+        ║  GOLD LAYER  (gold.* tables in DuckDB)            ║  ← Volume
+        ║  gold.drug_summary         — KPI dashboard        ║
+        ║  gold.drug_monthly_spend   — trend charts         ║
+        ║  gold.practice_leaderboard — top prescribers      ║
+        ╚═══════════════════════╦═══════════════════════════╝
+                                ║
+              ┌─────────────────╩──────────────────────┐
+              │                                        │
+        ┌─────▼──────┐                      ┌──────────▼──────────┐
+        │  DuckDB    │                      │  BeautifulSoup NLP  │  ← Variety
+        │  JOIN +    │                      │  + Counter terms    │
+        │  Parquet   │                      └──────────┬──────────┘
+        └─────┬──────┘                                 │
+              └───────────────┬────────────────────────┘
+                              │
+                  ┌───────────▼───────────┐
+                  │    matplotlib 2×2     │   ← Clinical insights
+                  │    outputs/           │
+                  └───────────────────────┘
 
-        Orchestration layer (Prefect — flows/pipeline_flow.py):
-          @task(retries=2, retry_delay_seconds=exponential_backoff(...))
-          Wraps every step above with automatic retry + UI visibility
+        Orchestration: Prefect @flow + @task (retries, exponential backoff, Prefect UI)
+        Streaming sim: notebook 08 — replay Bronze as micro-batches via generator
         ```
         """
     )
@@ -180,11 +191,13 @@ def __(mo):
         |----------|-------|-----|
         | 00 | Introduction | All (conceptual) |
         | 01 | Parallel fetch | Volume, Velocity |
-        | 02 | Raw data lake | Variety |
+        | 02 | Raw data lake (Bronze) | Variety |
         | 03 | DuckDB SQL | Volume |
         | 04 | Polars transform | Volume, Veracity |
         | 05 | NLP on NHS text | Variety |
         | 06 | Join + visualise | All four |
+        | 07 | Medallion architecture (Bronze → Silver → Gold) | Veracity, Volume |
+        | 08 | Streaming simulation (generators + DuckDB) | Velocity |
         """
     )
     return

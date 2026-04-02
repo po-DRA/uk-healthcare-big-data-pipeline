@@ -1,0 +1,29 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Runtime data — mount lake/ as a volume instead
+lake/
+outputs/
+pipeline.duckdb
+coverage.xml
+.coverage
+
+# Development tooling
+.git/
+.github/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Editor and OS
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db

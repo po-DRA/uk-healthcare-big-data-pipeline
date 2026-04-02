@@ -7,6 +7,7 @@ app = marimo.App(title="01 · Parallel Fetch — Volume & Velocity")
 @app.cell
 def __():
     import marimo as mo
+
     return (mo,)
 
 
@@ -34,6 +35,7 @@ def __():
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from pipeline.fetch import DRUG_CODES, fetch_nhs_pages, fetch_openprescribing
+
     return (
         DRUG_CODES,
         ThreadPoolExecutor,
@@ -60,10 +62,7 @@ def __(mo):
 
 @app.cell
 def __(DRUG_CODES):
-    DRUGS = [
-        (bnf_code, drug_name)
-        for drug_name, bnf_code in DRUG_CODES.items()
-    ]
+    DRUGS = [(bnf_code, drug_name) for drug_name, bnf_code in DRUG_CODES.items()]
     print("Drugs to fetch:")
     for code, name in DRUGS:
         print(f"  {name:20s}  BNF: {code}")
@@ -94,7 +93,7 @@ def __(DRUGS, fetch_openprescribing, time):
     sequential_estimate = _one_fetch_seconds * 8
     print(f"Single fetch time:          {_one_fetch_seconds:.2f} s")
     print(f"Sequential estimate (×8):   {sequential_estimate:.2f} s")
-    return sequential_estimate,
+    return (sequential_estimate,)
 
 
 @app.cell
@@ -131,8 +130,7 @@ def __(
     results = []
     with ThreadPoolExecutor(max_workers=8) as executor:
         future_map = {
-            executor.submit(fn, *args): (fn.__name__, args)
-            for fn, args in fetch_jobs
+            executor.submit(fn, *args): (fn.__name__, args) for fn, args in fetch_jobs
         }
         for future in as_completed(future_map):
             fn_name, args = future_map[future]
@@ -143,7 +141,9 @@ def __(
                 print(f"  ERROR in {fn_name}({args}): {exc}")
 
     parallel_time = time.perf_counter() - _t0
-    print(f"\nParallel fetch complete in {parallel_time:.2f} s ({len(results)} payloads)")
+    print(
+        f"\nParallel fetch complete in {parallel_time:.2f} s ({len(results)} payloads)"
+    )
     return fetch_jobs, future_map, parallel_time, results
 
 
@@ -183,7 +183,9 @@ def __(results):
         print(f"  {p['drug']:20s}  {p['total_rows']:>10,} records")
 
     print(f"\nTotal prescribing records across all 4 drugs: {total_rows:,}")
-    print(f"At ~150 bytes per record, that's ~{total_rows * 150 / 1_000_000:.0f} MB of raw data")
+    print(
+        f"At ~150 bytes per record, that's ~{total_rows * 150 / 1_000_000:.0f} MB of raw data"
+    )
     return prescribing_payloads, total_rows
 
 

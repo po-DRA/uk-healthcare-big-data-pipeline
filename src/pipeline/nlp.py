@@ -205,9 +205,7 @@ def top_terms(
     for section in sections:
         page_type = section["page_type"]
         # Combine heading, paragraph text, and bullets into one text blob
-        full_text = " ".join(
-            [section["heading"], section["text"]] + section["bullets"]
-        )
+        full_text = " ".join([section["heading"], section["text"]] + section["bullets"])
         tokens = tokenise(full_text, STOP_WORDS)
         for term, freq in Counter(tokens).items():
             rows.append(

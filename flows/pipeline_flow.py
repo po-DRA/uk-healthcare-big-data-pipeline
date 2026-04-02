@@ -29,28 +29,26 @@ Then open http://localhost:4200 to watch the run in real time.
 from __future__ import annotations
 
 import pathlib
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import polars as pl
 from prefect import flow, task
 from prefect.tasks import exponential_backoff
 
-from pipeline.fetch import fetch_nhs_pages, fetch_openprescribing
+from pipeline.fetch import DRUG_CODES, fetch_nhs_pages, fetch_openprescribing
 from pipeline.lake import write_lake
+from pipeline.medallion import build_dim_practice, build_gold, build_silver
 from pipeline.nlp import top_terms
 from pipeline.transform import build_prescribing_df, veracity_report
 
 # ---------------------------------------------------------------------------
-# Drug catalogue — (bnf_code, drug_name) pairs
+# Drug catalogue — derived from the single source of truth in pipeline.fetch
 # ---------------------------------------------------------------------------
 DRUGS: list[tuple[str, str]] = [
-    ("0601023A0", "metformin"),
-    ("0212000B0", "atorvastatin"),
-    ("0205051R0", "lisinopril"),
-    ("0206020A0", "amlodipine"),
+    (bnf_code, name) for name, bnf_code in DRUG_CODES.items()
 ]
 
 LAKE_DIR = pathlib.Path("lake")
+DB_PATH = pathlib.Path("pipeline.duckdb")
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +157,69 @@ def transform_task(lake_dir: pathlib.Path) -> pl.DataFrame:
     return report
 
 
+@task(name="Build Silver Layer", log_prints=True)
+def build_silver_task(lake_dir: pathlib.Path, db_path: pathlib.Path) -> int:
+    """Promote Bronze JSONL files to a typed, cleaned Silver DuckDB table.
+
+    Demonstrates **Veracity** — Silver is the trust boundary where raw data
+    is cast to proper types and unresolvable nulls are dropped.
+
+    Parameters
+    ----------
+    lake_dir:
+        Root of the Bronze lake.
+    db_path:
+        Path to the DuckDB file.
+
+    Returns
+    -------
+    int
+        Row count written to ``silver.prescribing``.
+    """
+    return build_silver(lake_dir, db_path)
+
+
+@task(name="Build SCD Type 2 Dimension", log_prints=True)
+def build_dim_practice_task(db_path: pathlib.Path) -> int:
+    """Build the SCD Type 2 GP practice dimension table.
+
+    Demonstrates **Veracity** — tracks how practice attributes (setting, CCG)
+    change over time, enabling accurate point-in-time analysis across
+    the July 2022 CCG → ICB reorganisation boundary.
+
+    Parameters
+    ----------
+    db_path:
+        Path to the DuckDB file containing ``silver.prescribing``.
+
+    Returns
+    -------
+    int
+        Total rows in ``gold.dim_practice``.
+    """
+    return build_dim_practice(db_path)
+
+
+@task(name="Build Gold Layer", log_prints=True)
+def build_gold_task(db_path: pathlib.Path) -> dict:
+    """Build Gold aggregation tables from Silver.
+
+    Demonstrates **Volume** — Gold tables summarise millions of raw records
+    into concise, business-ready results (KPIs, trends, leaderboards).
+
+    Parameters
+    ----------
+    db_path:
+        Path to the DuckDB file containing ``silver.prescribing``.
+
+    Returns
+    -------
+    dict
+        Mapping of Gold table name → row count.
+    """
+    return build_gold(db_path)
+
+
 @task(name="NLP Term Extraction", log_prints=True)
 def nlp_task(drug: str, lake_dir: pathlib.Path) -> pl.DataFrame:
     """Extract top clinical terms for a drug from NHS.uk pages.
@@ -190,7 +251,10 @@ def nlp_task(drug: str, lake_dir: pathlib.Path) -> pl.DataFrame:
 
 
 @flow(name="UK Healthcare Big Data Pipeline", log_prints=True)
-def run_pipeline(base_dir: pathlib.Path = LAKE_DIR) -> None:
+def run_pipeline(
+    base_dir: pathlib.Path = LAKE_DIR,
+    db_path: pathlib.Path = DB_PATH,
+) -> None:
     """Orchestrate the full UK healthcare big data pipeline.
 
     Fetches structured prescribing data and unstructured NHS pages for four
@@ -218,40 +282,70 @@ def run_pipeline(base_dir: pathlib.Path = LAKE_DIR) -> None:
     # ------------------------------------------------------------------
     print("\n[Step 1] Fetching data in parallel …")
 
-    # Submit all 8 fetch tasks concurrently using ThreadPoolExecutor.
+    # Submit all 8 fetch tasks concurrently using Prefect's native .submit().
     # Prefect tracks each as a separate task in the UI.
     prescribing_futures = [
         fetch_prescribing_task.submit(bnf_code, drug_name)
         for bnf_code, drug_name in DRUGS
     ]
-    nhs_futures = [
-        fetch_nhs_task.submit(drug_name)
-        for _, drug_name in DRUGS
-    ]
+    nhs_futures = [fetch_nhs_task.submit(drug_name) for _, drug_name in DRUGS]
 
     # ------------------------------------------------------------------
-    # Step 2: Write results to lake as they complete
+    # Step 2: Write results to lake as they complete (partial-success)
+    # A single drug failure is logged and skipped — the rest still run.
     # ------------------------------------------------------------------
     print("\n[Step 2] Writing to data lake …")
 
-    for future in prescribing_futures:
-        payload = future.result()
-        write_lake_task(payload, base_dir)
+    failed_drugs: list[str] = []
 
-    for future in nhs_futures:
-        payload = future.result()
-        write_lake_task(payload, base_dir)
+    for (_bnf_code, drug_name), future in zip(DRUGS, prescribing_futures, strict=False):
+        try:
+            payload = future.result()
+            write_lake_task(payload, base_dir)
+        except Exception as exc:
+            print(f"  ✗ Prescribing fetch failed for {drug_name}: {exc} — skipping")
+            failed_drugs.append(drug_name)
+
+    for (_, drug_name), future in zip(DRUGS, nhs_futures, strict=False):
+        try:
+            payload = future.result()
+            write_lake_task(payload, base_dir)
+        except Exception as exc:
+            print(f"  ✗ NHS pages fetch failed for {drug_name}: {exc} — skipping")
+
+    if failed_drugs:
+        print(
+            f"\n  ⚠ {len(failed_drugs)} drug(s) failed to fetch: "
+            f"{', '.join(failed_drugs)}. "
+            "Medallion layers will be built from available data."
+        )
 
     # ------------------------------------------------------------------
-    # Step 3: Polars transformation + veracity report
+    # Step 3: Polars transformation + veracity report (Bronze → verify)
     # ------------------------------------------------------------------
     print("\n[Step 3] Transforming with Polars (lazy evaluation) …")
     transform_task(base_dir)
 
     # ------------------------------------------------------------------
-    # Step 4: NLP on unstructured NHS text (one task per drug)
+    # Step 4: Medallion — Bronze → Silver → Gold
     # ------------------------------------------------------------------
-    print("\n[Step 4] Extracting NLP terms from NHS pages …")
+    print("\n[Step 4] Building Silver layer (typed, cleaned DuckDB table) …")
+    silver_rows = build_silver_task(base_dir, db_path)
+    print(f"  Silver rows: {silver_rows:,}")
+
+    print("\n[Step 5] Building Gold layer (aggregated business tables) …")
+    gold_counts = build_gold_task(db_path)
+    for table, count in gold_counts.items():
+        print(f"  {table}: {count:,} rows")
+
+    print("\n[Step 5b] Building SCD Type 2 practice dimension …")
+    dim_rows = build_dim_practice_task(db_path)
+    print(f"  gold.dim_practice: {dim_rows:,} practice-version rows")
+
+    # ------------------------------------------------------------------
+    # Step 6: NLP on unstructured NHS text (one task per drug)
+    # ------------------------------------------------------------------
+    print("\n[Step 6] Extracting NLP terms from NHS pages …")
     for _, drug_name in DRUGS:
         nlp_task(drug_name, base_dir)
 

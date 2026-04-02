@@ -8,7 +8,7 @@ on:
 
 jobs:
   ci:
-    name: Lint, type-check, and test
+    name: Lint, type-check, test, and validate notebooks
     runs-on: ubuntu-latest
 
     steps:
@@ -25,6 +25,10 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras
 
+      # ---------------------------------------------------------------
+      # Code quality
+      # ---------------------------------------------------------------
+
       - name: Lint with ruff
         run: uv run ruff check src/ flows/
 
@@ -34,5 +38,37 @@ jobs:
       - name: Type-check with mypy
         run: uv run mypy src/
 
-      - name: Run unit tests (exclude slow live-API tests)
+      # ---------------------------------------------------------------
+      # Notebook validation
+      # Marimo notebooks are pure Python.
+      # py_compile catches broken syntax; ruff catches style issues.
+      # ---------------------------------------------------------------
+
+      - name: Validate notebook syntax
+        run: uv run python -m py_compile notebooks/*.py
+
+      - name: Lint notebooks with ruff
+        run: uv run ruff check notebooks/
+
+      # ---------------------------------------------------------------
+      # Tests with coverage
+      # ---------------------------------------------------------------
+
+      - name: Run unit tests with coverage (exclude slow live-API tests)
         run: uv run pytest tests/ -v -m "not slow"
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 14
+
+      # ---------------------------------------------------------------
+      # Docker build validation
+      # Catches broken Dockerfiles before they reach production.
+      # ---------------------------------------------------------------
+
+      - name: Build Docker image
+        run: docker build -t uk-healthcare-pipeline:ci .

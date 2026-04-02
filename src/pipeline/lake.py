@@ -1,18 +1,30 @@
 """
-pipeline/lake.py — raw data lake read/write helpers.
+pipeline/lake.py — Bronze layer: raw data lake read/write helpers.
 
-Persists fetched payloads to the local file system in two formats:
+This module implements the **Bronze layer** of the medallion architecture.
+Bronze is write-once: raw API responses are persisted exactly as received,
+in two formats that coexist under the same ``lake/`` directory tree.
+
+  Medallion layer: BRONZE  ← you are here
+  Next layer:      SILVER  → see pipeline/medallion.py (build_silver)
+  Final layer:     GOLD    → see pipeline/medallion.py (build_gold)
+
+**Bronze rule:** never transform data in place.  If a Silver or Gold
+computation is wrong, fix the transformation code and re-derive from
+these unchanged Bronze files.
+
+Formats written:
   - JSONL (newline-delimited JSON) for structured prescribing records
   - JSON for unstructured NHS page payloads
 
 This is the Variety V made physically visible: two completely different
 file formats coexisting under the same lake/ directory tree.
 
-Lake directory layout:
+Lake directory layout (Bronze):
     lake/
     ├── metformin/
-    │   ├── prescribing.jsonl
-    │   └── nhs_pages.json
+    │   ├── prescribing.jsonl   ← structured (one record per line)
+    │   └── nhs_pages.json      ← unstructured (full JSON document)
     ├── atorvastatin/
     │   ├── prescribing.jsonl
     │   └── nhs_pages.json
@@ -22,7 +34,10 @@ Lake directory layout:
 from __future__ import annotations
 
 import json
+import logging
 import pathlib
+
+_log = logging.getLogger(__name__)
 
 
 def write_lake(payload: dict, base_dir: pathlib.Path) -> pathlib.Path:
@@ -56,16 +71,28 @@ def write_lake(payload: dict, base_dir: pathlib.Path) -> pathlib.Path:
 
     if data_type == "openprescribing":
         out_path = drug_dir / "prescribing.jsonl"
-        with out_path.open("w", encoding="utf-8") as fh:
-            for record in payload["records"]:
-                fh.write(json.dumps(record) + "\n")
-        print(f"  ✓ Wrote {len(payload['records']):,} records → {out_path}")
+        tmp_path = out_path.with_suffix(".jsonl.tmp")
+        try:
+            with tmp_path.open("w", encoding="utf-8") as fh:
+                for record in payload["records"]:
+                    fh.write(json.dumps(record) + "\n")
+            tmp_path.replace(out_path)  # atomic on POSIX and NTFS
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+        _log.info("Wrote %d records → %s", len(payload["records"]), out_path)
 
     elif data_type == "nhs_pages":
         out_path = drug_dir / "nhs_pages.json"
-        with out_path.open("w", encoding="utf-8") as fh:
-            json.dump(payload, fh, indent=2, ensure_ascii=False)
-        print(f"  ✓ Wrote {len(payload['pages'])} pages → {out_path}")
+        tmp_path = out_path.with_suffix(".json.tmp")
+        try:
+            with tmp_path.open("w", encoding="utf-8") as fh:
+                json.dump(payload, fh, indent=2, ensure_ascii=False)
+            tmp_path.replace(out_path)  # atomic on POSIX and NTFS
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
+        _log.info("Wrote %d pages → %s", len(payload["pages"]), out_path)
 
     else:
         raise ValueError(f"Unknown payload type: {data_type!r}")

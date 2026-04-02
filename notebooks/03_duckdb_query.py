@@ -7,6 +7,7 @@ app = marimo.App(title="03 · DuckDB SQL — Volume")
 @app.cell
 def __():
     import marimo as mo
+
     return (mo,)
 
 
@@ -32,8 +33,10 @@ def __(mo):
 
 @app.cell
 def __():
-    import duckdb
     import pathlib
+
+    import duckdb
+
     return duckdb, pathlib
 
 
@@ -71,7 +74,7 @@ def __(duckdb, pathlib):
     )
 
     row_count = con.execute("SELECT COUNT(*) FROM prescriptions").fetchone()[0]
-    print(f"View created: prescriptions")
+    print("View created: prescriptions")
     print(f"Total rows visible to DuckDB: {row_count:,}")
     print(f"DuckDB file: {pathlib.Path('pipeline.duckdb').resolve()}")
     return LAKE_DIR, con, row_count

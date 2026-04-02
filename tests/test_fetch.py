@@ -176,15 +176,17 @@ def test_fetch_nhs_pages_headings_extracted():
     assert "Common side effects" in headings
 
 
-def test_fetch_nhs_pages_404_skipped(capsys):
+def test_fetch_nhs_pages_404_skipped(caplog):
     """404 responses must be skipped gracefully without raising."""
+    import logging
+
     mock_404 = MagicMock()
     mock_404.status_code = 404
 
     with patch("pipeline.fetch.httpx.get", return_value=mock_404):
-        result = fetch_nhs_pages("metformin")
+        with caplog.at_level(logging.WARNING, logger="pipeline.fetch"):
+            result = fetch_nhs_pages("metformin")
 
     # Should not raise; pages may be empty if all 3 return 404
     assert isinstance(result["pages"], list)
-    captured = capsys.readouterr()
-    assert "Warning" in captured.out
+    assert any("404" in record.message for record in caplog.records)

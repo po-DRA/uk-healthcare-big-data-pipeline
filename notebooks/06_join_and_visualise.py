@@ -7,6 +7,7 @@ app = marimo.App(title="06 · Join & Visualise — All 4 V's")
 @app.cell
 def __():
     import marimo as mo
+
     return (mo,)
 
 
@@ -46,6 +47,7 @@ def __():
         plot_top_terms,
         save_figure,
     )
+
     return (
         duckdb,
         json,
@@ -98,11 +100,19 @@ def __(DRUGS, LAKE_DIR, top_terms):
         with nlp_path.open("w", encoding="utf-8") as fh:
             for row in combined_terms.iter_rows(named=True):
                 import json
+
                 fh.write(json.dumps(row) + "\n")
         print(f"NLP terms written: {len(combined_terms):,} rows → {nlp_path}")
     else:
         print("No NLP terms to write — check that lake/*/nhs_pages.json files exist")
-        combined_terms = pl.DataFrame(schema={"drug": pl.String, "term": pl.String, "frequency": pl.Int64, "page_type": pl.String})
+        combined_terms = pl.DataFrame(
+            schema={
+                "drug": pl.String,
+                "term": pl.String,
+                "frequency": pl.Int64,
+                "page_type": pl.String,
+            }
+        )
     return all_terms_frames, combined_terms, df, drug, fh, json, nlp_path, pl, row
 
 
@@ -326,7 +336,7 @@ def __(
     output_path = pathlib.Path("outputs") / "clinical_insight.png"
     save_figure(fig, output_path)
 
-    fig
+    fig  # noqa: B018 — Marimo renders the bare expression as notebook output
     return axes, fig, output_path
 
 

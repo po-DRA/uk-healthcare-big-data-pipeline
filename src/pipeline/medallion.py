@@ -1,0 +1,389 @@
+"""
+pipeline/medallion.py — Medallion architecture: Bronze → Silver → Gold.
+
+Implements the three-layer data lake pattern using DuckDB as the persistence
+store for the Silver and Gold layers:
+
+  Bronze  raw JSONL/JSON files on disk written by lake.py — never modified
+  Silver  cleaned, typed, deduplicated DuckDB table (schema: silver)
+  Gold    aggregated business-ready DuckDB tables   (schema: gold)
+
+Teaching points
+---------------
+- Bronze is write-once: you never transform the raw files in place.
+  If something goes wrong you can always re-derive Silver/Gold from Bronze.
+- Silver is the trust boundary: the data here is typed, null-checked, and
+  deduplicated — safe to hand to an analyst without warnings.
+- Gold answers specific business questions: these tables are what you'd
+  connect to Power BI, Tableau, or a REST API.
+- DuckDB schemas (``silver``, ``gold``) give us namespace separation inside
+  a single ``pipeline.duckdb`` file — no separate database server required.
+
+Usage
+-----
+    from pathlib import Path
+    from pipeline.medallion import build_silver, build_gold
+
+    lake_dir = Path("lake")
+    db_path  = Path("pipeline.duckdb")
+
+    row_count = build_silver(lake_dir, db_path)
+    print(f"Silver rows: {row_count:,}")
+
+    counts = build_gold(db_path)
+    for table, n in counts.items():
+        print(f"  {table}: {n:,} rows")
+"""
+
+from __future__ import annotations
+
+import logging
+import pathlib
+
+import duckdb
+
+_log = logging.getLogger(__name__)
+
+
+def _ensure_schemas(con: duckdb.DuckDBPyConnection) -> None:
+    """Create silver and gold schemas if they don't already exist."""
+    con.execute("CREATE SCHEMA IF NOT EXISTS silver")
+    con.execute("CREATE SCHEMA IF NOT EXISTS gold")
+
+
+def build_silver(
+    lake_dir: pathlib.Path,
+    db_path: pathlib.Path = pathlib.Path("pipeline.duckdb"),
+) -> int:
+    """Read Bronze JSONL files and write a cleaned Silver table to DuckDB.
+
+    Demonstrates **Veracity** — Silver is where we make the data trustworthy:
+    types are enforced, nulls are surfaced, and unresolvable rows are dropped.
+
+    Silver transformations applied
+    --------------------------------
+    - ``TRY_CAST`` all numeric fields (surfaces bad values as NULL rather than
+      raising an error — graceful degradation)
+    - Derive ``nic_per_item`` (cost ÷ items, NULL when either is NULL)
+    - Derive ``year_month`` string (``"YYYY-MM"``)
+    - Drop rows where *both* ``actual_cost`` AND ``items`` are NULL
+      (these rows carry no analytical value)
+    - Add ``ingested_at`` timestamp so we know when Silver was built
+
+    Parameters
+    ----------
+    lake_dir:
+        Root of the Bronze lake, e.g. ``Path("lake")``.
+    db_path:
+        Path to the DuckDB file, e.g. ``Path("pipeline.duckdb")``.
+
+    Returns
+    -------
+    int
+        Number of rows written to ``silver.prescribing``.
+    """
+    glob_pattern = str(lake_dir / "*" / "prescribing.jsonl")
+    with duckdb.connect(str(db_path)) as con:
+        _ensure_schemas(con)
+
+        # Build into a staging table first so concurrent readers of
+        # silver.prescribing never see a half-built table.
+        # The final RENAME is atomic — readers get the old table or the new
+        # table; never an empty or partial one.
+        con.execute("DROP TABLE IF EXISTS silver.prescribing_new")
+
+        # TRY_CAST is the Silver superpower: it converts bad values to NULL
+        # instead of crashing — we surface the problem rather than hiding it.
+        con.execute(
+            f"""
+            CREATE TABLE silver.prescribing_new AS
+            SELECT
+                -- Date: cast to proper DATE type for correct sorting and filtering
+                TRY_CAST(date AS DATE)                                       AS date,
+
+                -- Numeric fields: TRY_CAST surfaces malformed values as NULL
+                TRY_CAST(actual_cost AS DOUBLE)                              AS actual_cost,
+                TRY_CAST(items       AS BIGINT)                              AS items,
+                TRY_CAST(quantity    AS DOUBLE)                              AS quantity,
+
+                -- Identity fields
+                row_id,
+                setting,
+                ccg,
+                drug,
+
+                -- Derived: cost per item — NULL when either input is NULL or items=0
+                ROUND(
+                    TRY_CAST(actual_cost AS DOUBLE)
+                    / NULLIF(TRY_CAST(items AS BIGINT), 0),
+                    4
+                )                                                            AS nic_per_item,
+
+                -- Derived: "YYYY-MM" partition key for monthly aggregations
+                STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')                   AS year_month,
+
+                -- Audit: when was this Silver table last rebuilt?
+                now()                                                        AS ingested_at
+
+            FROM read_json(
+                '{glob_pattern}',
+                format      = 'newline_delimited',
+                auto_detect = true
+            )
+            -- Drop rows where both cost AND items are NULL — analytically worthless
+            WHERE NOT (actual_cost IS NULL AND items IS NULL)
+            """
+        )
+
+        row_count: int = con.execute(
+            "SELECT COUNT(*) FROM silver.prescribing_new"
+        ).fetchone()[0]
+
+        # Atomic swap: drop old, rename new → readers never see an empty table
+        con.execute("DROP TABLE IF EXISTS silver.prescribing")
+        con.execute("ALTER TABLE silver.prescribing_new RENAME TO prescribing")
+
+    _log.info("Silver built: %d rows → silver.prescribing in %s", row_count, db_path)
+    return row_count
+
+
+def build_dim_practice(
+    db_path: pathlib.Path = pathlib.Path("pipeline.duckdb"),
+) -> int:
+    """Build a Slowly Changing Dimension (SCD Type 2) table for GP practices.
+
+    Demonstrates **Veracity** — dimension data drifts over time, and tracking
+    that drift is essential for accurate point-in-time analysis.
+
+    Background
+    ----------
+    In July 2022 England's 106 Clinical Commissioning Groups (CCGs) were
+    dissolved and replaced by 42 Integrated Care Boards (ICBs).  Every GP
+    practice that existed before that date has *two* valid answers to
+    "which commissioning body are you in?" depending on the analysis date.
+    Without SCD Type 2, a trend query crossing that boundary silently
+    attributes old spend to the wrong ICB.
+
+    SCD Types compared
+    ------------------
+    - **Type 1** (overwrite): update the row in place — simple, but history
+      is lost.  Use only for correcting data-entry errors.
+    - **Type 2** (versioned rows): add a new row for each change, keeping
+      the old row with ``valid_to`` set — full history preserved.  Industry
+      default for audit-required healthcare analytics.
+    - **Type 3** (add column): add a ``previous_ccg`` column — keeps only
+      one level of history.  Rarely used in practice.
+
+    How this works
+    --------------
+    1. Group Silver records by (practice, setting, ccg) to find distinct
+       attribute combinations.
+    2. Use ``LEAD()`` to discover when the *next* version of a practice starts
+       — that date becomes ``valid_to`` for the current version.
+    3. Practices whose attributes never changed have one row with
+       ``valid_to = NULL`` and ``is_current = TRUE``.
+    4. A point-in-time query uses:
+       ``WHERE valid_from <= :date AND (valid_to IS NULL OR valid_to > :date)``
+
+    Parameters
+    ----------
+    db_path:
+        Path to the DuckDB file containing ``silver.prescribing``.
+
+    Returns
+    -------
+    int
+        Total rows in ``gold.dim_practice`` (one row per practice-version).
+    """
+    with duckdb.connect(str(db_path)) as con:
+        _ensure_schemas(con)
+
+        con.execute(
+            """
+            CREATE OR REPLACE TABLE gold.dim_practice AS
+            WITH practice_versions AS (
+                -- Step 1: collapse each distinct (practice, setting, ccg) combination
+                -- to its earliest and latest observed date.
+                -- Each combination = one "version" of the practice.
+                SELECT
+                    row_id              AS practice_id,
+                    setting,
+                    ccg,
+                    MIN(date)           AS first_seen,
+                    MAX(date)           AS last_seen
+                FROM silver.prescribing
+                GROUP BY row_id, setting, ccg
+            ),
+            with_successor AS (
+                -- Step 2: use LEAD() to find when the next version starts.
+                -- That start date becomes valid_to for the current version.
+                SELECT
+                    practice_id,
+                    setting,
+                    ccg,
+                    first_seen                          AS valid_from,
+                    LEAD(first_seen) OVER (
+                        PARTITION BY practice_id
+                        ORDER BY first_seen
+                    )                                   AS valid_to,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY practice_id
+                        ORDER BY first_seen
+                    )                                   AS version_num
+                FROM practice_versions
+            )
+            -- Step 3: add is_current flag.
+            -- The most recent version has no successor, so valid_to IS NULL.
+            SELECT
+                practice_id,
+                setting,
+                ccg,
+                valid_from,
+                valid_to,
+                version_num,
+                (valid_to IS NULL)                      AS is_current
+            FROM with_successor
+            ORDER BY practice_id, valid_from
+            """
+        )
+
+        row_count: int = con.execute(
+            "SELECT COUNT(*) FROM gold.dim_practice"
+        ).fetchone()[0]
+        changed: int = con.execute(
+            "SELECT COUNT(*) FROM gold.dim_practice WHERE version_num > 1"
+        ).fetchone()[0]
+
+    _log.info(
+        "gold.dim_practice: %d rows (%d practice-versions with changed attributes)",
+        row_count,
+        changed,
+    )
+    return row_count
+
+
+def build_gold(
+    db_path: pathlib.Path = pathlib.Path("pipeline.duckdb"),
+) -> dict[str, int]:
+    """Build Gold aggregation tables from Silver.
+
+    Demonstrates **Volume** — Gold tables summarise millions of raw records
+    into concise, business-ready results that load instantly.
+
+    Gold tables created
+    -------------------
+    ``gold.drug_summary``
+        One row per drug: total items, total cost, avg NIC per item,
+        unique practice count, and months of data.
+        **Use case:** top-line KPI dashboard.
+
+    ``gold.drug_monthly_spend``
+        One row per drug × month: total items and cost.
+        **Use case:** trend charts, spend forecasting.
+
+    ``gold.practice_leaderboard``
+        Top 20 practices per drug ranked by total items prescribed.
+        **Use case:** identifying high-volume prescribers.
+
+    Parameters
+    ----------
+    db_path:
+        Path to the DuckDB file containing ``silver.prescribing``.
+
+    Returns
+    -------
+    dict[str, int]
+        Mapping of Gold table name → row count.
+    """
+    with duckdb.connect(str(db_path)) as con:
+        _ensure_schemas(con)
+
+        # Build each Gold table into a _new staging table, then atomically
+        # swap so concurrent notebook queries never see a partial result.
+
+        # ------------------------------------------------------------------
+        # Gold table 1 — drug_summary (top-line KPIs)
+        # ------------------------------------------------------------------
+        con.execute("DROP TABLE IF EXISTS gold.drug_summary_new")
+        con.execute(
+            """
+            CREATE TABLE gold.drug_summary_new AS
+            SELECT
+                drug,
+                -- Volume V: the scale of NHS prescribing in one number
+                SUM(items)                                          AS total_items,
+                ROUND(SUM(actual_cost), 2)                         AS total_cost_gbp,
+                ROUND(
+                    SUM(actual_cost) / NULLIF(SUM(items), 0),
+                    4
+                )                                                  AS avg_nic_per_item,
+                COUNT(DISTINCT row_id)                             AS unique_practices,
+                COUNT(DISTINCT year_month)                         AS months_of_data
+            FROM silver.prescribing
+            GROUP BY drug
+            ORDER BY total_items DESC
+            """
+        )
+        con.execute("DROP TABLE IF EXISTS gold.drug_summary")
+        con.execute("ALTER TABLE gold.drug_summary_new RENAME TO drug_summary")
+
+        # ------------------------------------------------------------------
+        # Gold table 2 — drug_monthly_spend (trend data)
+        # ------------------------------------------------------------------
+        con.execute("DROP TABLE IF EXISTS gold.drug_monthly_spend_new")
+        con.execute(
+            """
+            CREATE TABLE gold.drug_monthly_spend_new AS
+            SELECT
+                drug,
+                year_month,
+                SUM(items)                      AS total_items,
+                ROUND(SUM(actual_cost), 2)      AS total_cost_gbp
+            FROM silver.prescribing
+            GROUP BY drug, year_month
+            ORDER BY drug, year_month
+            """
+        )
+        con.execute("DROP TABLE IF EXISTS gold.drug_monthly_spend")
+        con.execute(
+            "ALTER TABLE gold.drug_monthly_spend_new RENAME TO drug_monthly_spend"
+        )
+
+        # ------------------------------------------------------------------
+        # Gold table 3 — practice_leaderboard (top prescribers)
+        # QUALIFY filters the window function result without a subquery
+        # ------------------------------------------------------------------
+        con.execute("DROP TABLE IF EXISTS gold.practice_leaderboard_new")
+        con.execute(
+            """
+            CREATE TABLE gold.practice_leaderboard_new AS
+            SELECT
+                drug,
+                row_id                          AS practice_id,
+                SUM(items)                      AS total_items,
+                ROUND(SUM(actual_cost), 2)      AS total_cost_gbp,
+                ROW_NUMBER() OVER (
+                    PARTITION BY drug
+                    ORDER BY SUM(items) DESC
+                )                               AS rank
+            FROM silver.prescribing
+            GROUP BY drug, row_id
+            QUALIFY rank <= 20
+            ORDER BY drug, rank
+            """
+        )
+        con.execute("DROP TABLE IF EXISTS gold.practice_leaderboard")
+        con.execute(
+            "ALTER TABLE gold.practice_leaderboard_new RENAME TO practice_leaderboard"
+        )
+
+        counts: dict[str, int] = {}
+        for table in (
+            "gold.drug_summary",
+            "gold.drug_monthly_spend",
+            "gold.practice_leaderboard",
+        ):
+            counts[table] = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            _log.info("%s: %d rows", table, counts[table])
+
+    return counts
