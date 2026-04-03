@@ -722,8 +722,7 @@ Ports forwarded:
 
 ### Lineage & Observability
 - [OpenLineage Specification](https://openlineage.io/) - vendor-neutral standard for capturing data lineage events
-- [OpenMetadata](https://open-metadata.org/) - open-source data catalogue with native OpenLineage ingestion, column-level lineage, and data quality integration
-- [OpenMetadata](https://open-metadata.org/) - broader data catalogue that ingests OpenLineage events alongside schema metadata
+- [OpenMetadata](https://open-metadata.org/) - open-source data catalogue with native OpenLineage ingestion, column-level lineage, data quality integration, and schema metadata
 - [Prefect + OpenLineage](https://docs.prefect.io/latest/guides/openlineage/) - official Prefect integration for automatic lineage emission from flows
 
 ### Backfill & Partition Management
