@@ -105,7 +105,16 @@ def fetch_openprescribing(drug_bnf_code: str, drug_name: str) -> dict:
     url = _OPENPRESCRIBING_BASE.format(bnf_code=drug_bnf_code)
     _log.info("Fetching OpenPrescribing: %s (%s)", drug_name, drug_bnf_code)
 
-    response = httpx.get(url, timeout=_HTTP_TIMEOUT)
+    response = httpx.get(
+        url,
+        timeout=_HTTP_TIMEOUT,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (compatible; uk-healthcare-pipeline/1.0; "
+                "+https://github.com/po-DRA/uk-healthcare-big-data-pipeline)"
+            )
+        },
+    )
     response.raise_for_status()
     raw: list[dict] = response.json()
 
