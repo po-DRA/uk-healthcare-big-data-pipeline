@@ -1,6 +1,6 @@
 # UK Healthcare Big Data Pipeline
 
-[![CI](https://github.com/priya-gitTest/uk-healthcare-big-data-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/priya-gitTest/uk-healthcare-big-data-pipeline/actions)
+[![CI](https://github.com/po-DRA/uk-healthcare-big-data-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/po-DRA/uk-healthcare-big-data-pipeline/actions)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 [![Licence: MIT](https://img.shields.io/badge/Licence-MIT-green.svg)](LICENSE)
 
@@ -524,7 +524,7 @@ WHERE practice_id = 'E84006'
 
 ```bash
 # Clone the repository
-git clone https://github.com/priya-gitTest/uk-healthcare-big-data-pipeline.git
+git clone https://github.com/po-DRA/uk-healthcare-big-data-pipeline.git
 cd uk-healthcare-big-data-pipeline
 
 # Install all dependencies (creates .venv automatically)
