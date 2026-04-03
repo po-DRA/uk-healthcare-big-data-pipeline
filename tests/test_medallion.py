@@ -13,7 +13,7 @@ import pathlib
 import duckdb
 import pytest
 
-from pipeline.medallion import build_dim_practice, build_gold, build_silver
+from pipeline.medallion import build_dim_practice, build_gold, build_silver, build_silver_for_range
 
 # ---------------------------------------------------------------------------
 # Fixtures — reuse the same synthetic data shape as test_transform.py
@@ -382,3 +382,74 @@ def test_build_dim_practice_idempotent(scd_db):
     count1 = build_dim_practice(scd_db)
     count2 = build_dim_practice(scd_db)
     assert count1 == count2
+
+
+# ---------------------------------------------------------------------------
+# build_silver_for_range tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def silver_db(lake_dir, db_path):
+    """DuckDB with a pre-built Silver table ready for backfill tests."""
+    build_silver(lake_dir, db_path)
+    return db_path
+
+
+def test_build_silver_for_range_returns_int(silver_db, lake_dir):
+    result = build_silver_for_range(lake_dir, silver_db, "2024-01", "2024-01")
+    assert isinstance(result, int)
+
+
+def test_build_silver_for_range_inserts_rows_in_window(silver_db, lake_dir):
+    """Rows for the target month must appear after backfill."""
+    inserted = build_silver_for_range(lake_dir, silver_db, "2024-01", "2024-01")
+    assert inserted > 0
+
+
+def test_build_silver_for_range_excludes_rows_outside_window(silver_db, lake_dir):
+    """Rows outside the window must not be affected."""
+    con = duckdb.connect(str(silver_db))
+    before_feb = con.execute(
+        "SELECT COUNT(*) FROM silver.prescribing WHERE year_month = '2024-02'"
+    ).fetchone()[0]
+    con.close()
+
+    build_silver_for_range(lake_dir, silver_db, "2024-01", "2024-01")
+
+    con = duckdb.connect(str(silver_db))
+    after_feb = con.execute(
+        "SELECT COUNT(*) FROM silver.prescribing WHERE year_month = '2024-02'"
+    ).fetchone()[0]
+    con.close()
+
+    assert before_feb == after_feb
+
+
+def test_build_silver_for_range_is_idempotent(silver_db, lake_dir):
+    """Running the backfill twice must produce the same row count."""
+    first = build_silver_for_range(lake_dir, silver_db, "2024-01", "2024-02")
+    second = build_silver_for_range(lake_dir, silver_db, "2024-01", "2024-02")
+    assert first == second
+
+
+def test_build_silver_for_range_no_double_counting(silver_db, lake_dir):
+    """After two runs the total Silver rows must equal one run, not two."""
+    build_silver_for_range(lake_dir, silver_db, "2024-01", "2024-01")
+    build_silver_for_range(lake_dir, silver_db, "2024-01", "2024-01")
+
+    con = duckdb.connect(str(silver_db))
+    count = con.execute(
+        "SELECT COUNT(*) FROM silver.prescribing WHERE year_month = '2024-01'"
+    ).fetchone()[0]
+    con.close()
+
+    # Synthetic data: Jan 2024 has 1 metformin (A001) + 1 atorvastatin (B001) = 2 valid rows.
+    # The metformin A002 row (both cost AND items NULL) is dropped by the WHERE clause.
+    assert count == 2
+
+
+def test_build_silver_for_range_raises_without_silver(lake_dir, db_path):
+    """Must raise RuntimeError when silver.prescribing does not exist."""
+    with pytest.raises(RuntimeError, match="silver.prescribing does not exist"):
+        build_silver_for_range(lake_dir, db_path, "2024-01", "2024-01")

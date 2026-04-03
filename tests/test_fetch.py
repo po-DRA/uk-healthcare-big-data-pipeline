@@ -190,3 +190,62 @@ def test_fetch_nhs_pages_404_skipped(caplog):
     # Should not raise; pages may be empty if all 3 return 404
     assert isinstance(result["pages"], list)
     assert any("404" in record.message for record in caplog.records)
+
+
+def test_fetch_nhs_pages_invalid_drug_name_raises():
+    """drug_name containing digits or spaces must raise ValueError (line 166)."""
+    with pytest.raises(ValueError, match="Invalid drug_name"):
+        fetch_nhs_pages("metformin2")
+
+
+def test_fetch_nhs_pages_http_status_error_skipped(caplog):
+    """Non-404 HTTPStatusError must be caught and page skipped (lines 192-194)."""
+    import logging
+
+    from httpx import HTTPStatusError
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 500
+    mock_resp.raise_for_status.side_effect = HTTPStatusError(
+        "server error", request=MagicMock(), response=MagicMock(status_code=500)
+    )
+
+    with patch("pipeline.fetch.httpx.get", return_value=mock_resp):
+        with caplog.at_level(logging.WARNING, logger="pipeline.fetch"):
+            result = fetch_nhs_pages("metformin")
+
+    assert isinstance(result["pages"], list)
+    assert any("500" in record.message for record in caplog.records)
+
+
+def test_fetch_nhs_pages_request_error_skipped(caplog):
+    """Network-level RequestError must be caught and page skipped (lines 195-197)."""
+    import logging
+
+    from httpx import RequestError
+
+    with patch(
+        "pipeline.fetch.httpx.get",
+        side_effect=RequestError("connection refused"),
+    ):
+        with caplog.at_level(logging.WARNING, logger="pipeline.fetch"):
+            result = fetch_nhs_pages("metformin")
+
+    assert isinstance(result["pages"], list)
+    assert any("connection refused" in record.message for record in caplog.records)
+
+
+def test_fetch_nhs_pages_no_headings_fallback():
+    """HTML with no h2/h3 headings uses the paragraph fallback (lines 206-208)."""
+    html_no_headings = """
+    <html><body><main>
+      <p>This is some text without any headings.</p>
+      <ul><li>A bullet point</li></ul>
+    </main></body></html>
+    """
+    with patch("pipeline.fetch.httpx.get", return_value=_make_nhs_mock(html_no_headings)):
+        result = fetch_nhs_pages("metformin")
+
+    assert len(result["pages"]) > 0
+    # Fallback sets heading to empty string
+    assert any(p["heading"] == "" for p in result["pages"])

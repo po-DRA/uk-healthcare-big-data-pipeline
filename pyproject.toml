@@ -14,6 +14,8 @@ dependencies = [
   "marimo>=0.6",
   "prefect>=3.0",
   "tenacity>=8.2",
+  "curl-cffi>=0.14.0",
+  "pydantic>=2.0",
 ]
 
 [dependency-groups]
@@ -54,7 +56,7 @@ testpaths = ["tests"]
 markers = [
   "slow: marks tests that make live API calls (deselect with -m 'not slow')",
 ]
-addopts = "--cov=src/pipeline --cov-report=term-missing --cov-report=xml"
+addopts = "--cov=src/pipeline --cov-report=term-missing --cov-report=xml -m 'not slow'"
 
 [tool.coverage.run]
 omit = ["tests/*"]

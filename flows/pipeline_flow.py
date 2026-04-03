@@ -30,12 +30,15 @@ from __future__ import annotations
 
 import pathlib
 
+import duckdb
 import polars as pl
 from prefect import flow, task
 from prefect.tasks import exponential_backoff
 
+from pipeline.contracts import DEFAULT_NULL_THRESHOLDS, SilverDQViolation
 from pipeline.fetch import DRUG_CODES, fetch_nhs_pages, fetch_openprescribing
 from pipeline.lake import write_lake
+from pipeline.lineage import dataset, lineage_job
 from pipeline.medallion import build_dim_practice, build_gold, build_silver
 from pipeline.nlp import top_terms
 from pipeline.transform import build_prescribing_df, veracity_report
@@ -176,7 +179,74 @@ def build_silver_task(lake_dir: pathlib.Path, db_path: pathlib.Path) -> int:
     int
         Row count written to ``silver.prescribing``.
     """
-    return build_silver(lake_dir, db_path)
+    with lineage_job(
+        "build_silver",
+        inputs=[dataset(f"lake/{name}/prescribing.jsonl") for _, name in DRUGS],
+        outputs=[dataset("silver.prescribing")],
+    ):
+        return build_silver(lake_dir, db_path)
+
+
+@task(name="Validate Silver Quality", log_prints=True)
+def validate_silver_task(
+    db_path: pathlib.Path,
+    thresholds: dict[str, float] | None = None,
+) -> dict[str, float]:
+    """Gate: fail the pipeline if Silver null-rate thresholds are breached.
+
+    Demonstrates **Veracity** — this is the difference between *measuring*
+    data quality (``veracity_report``) and *enforcing* it.  If any field's
+    null rate exceeds its threshold the task raises ``SilverDQViolation``
+    and the Prefect flow is marked FAILED, preventing bad data from
+    propagating into Gold aggregations.
+
+    Parameters
+    ----------
+    db_path:
+        Path to the DuckDB file containing ``silver.prescribing``.
+    thresholds:
+        Optional override mapping ``field_name → max_null_pct``.  Defaults
+        to ``pipeline.contracts.DEFAULT_NULL_THRESHOLDS``.
+
+    Returns
+    -------
+    dict[str, float]
+        Actual null percentages per checked field (for logging / UI display).
+
+    Raises
+    ------
+    SilverDQViolation
+        If any field's null rate exceeds its threshold.
+    """
+    effective = thresholds if thresholds is not None else DEFAULT_NULL_THRESHOLDS
+
+    with duckdb.connect(str(db_path)) as con:
+        total = con.execute("SELECT COUNT(*) FROM silver.prescribing").fetchone()[0]
+
+        if total == 0:
+            print("  ⚠ Silver table is empty — skipping DQ gate")
+            return {}
+
+        null_pcts: dict[str, float] = {}
+        for field in effective:
+            null_count = con.execute(
+                f"SELECT COUNT(*) FROM silver.prescribing WHERE {field} IS NULL"
+            ).fetchone()[0]
+            null_pcts[field] = round(null_count * 100.0 / total, 2)
+
+    print("  Silver null-rate check:")
+    violations: dict[str, dict[str, float]] = {}
+    for field, pct in null_pcts.items():
+        threshold = effective[field]
+        status = "✗ FAIL" if pct > threshold else "✓ pass"
+        print(f"    {status}  {field}: {pct:.2f}% nulls (limit {threshold:.1f}%)")
+        if pct > threshold:
+            violations[field] = {"null_pct": pct, "threshold": threshold}
+
+    if violations:
+        raise SilverDQViolation(violations)
+
+    return null_pcts
 
 
 @task(name="Build SCD Type 2 Dimension", log_prints=True)
@@ -217,7 +287,16 @@ def build_gold_task(db_path: pathlib.Path) -> dict:
     dict
         Mapping of Gold table name → row count.
     """
-    return build_gold(db_path)
+    with lineage_job(
+        "build_gold",
+        inputs=[dataset("silver.prescribing")],
+        outputs=[
+            dataset("gold.drug_summary"),
+            dataset("gold.drug_monthly_spend"),
+            dataset("gold.practice_leaderboard"),
+        ],
+    ):
+        return build_gold(db_path)
 
 
 @task(name="NLP Term Extraction", log_prints=True)
@@ -332,6 +411,9 @@ def run_pipeline(
     print("\n[Step 4] Building Silver layer (typed, cleaned DuckDB table) …")
     silver_rows = build_silver_task(base_dir, db_path)
     print(f"  Silver rows: {silver_rows:,}")
+
+    print("\n[Step 4b] Validating Silver data quality (DQ gate) …")
+    validate_silver_task(db_path)
 
     print("\n[Step 5] Building Gold layer (aggregated business tables) …")
     gold_counts = build_gold_task(db_path)

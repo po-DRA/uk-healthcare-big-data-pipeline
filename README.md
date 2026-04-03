@@ -49,6 +49,9 @@ You will build a complete pipeline that fetches NHS prescribing records and clin
 | **Medallion architecture** | Bronze → Silver (DuckDB) → Gold (DuckDB) | 07 |
 | **SCD Type 2** | Track GP practice attribute changes over time | 07 |
 | **Streaming simulation** | Micro-batch ingestion via Python generators + DuckDB | 08 |
+| **Data contracts** | Pydantic models enforce schema at the API boundary; DQ gate halts the pipeline on null-rate breaches | Flow |
+| **Lineage tracking** | OpenLineage-format events emitted from Prefect tasks; log-only mode needs no backend | Flow |
+| **Backfill** | Partition-level re-processing of Silver/Gold for a date range; idempotency proof | 10 |
 | **Prefect orchestration** | `@flow` / `@task` with retries, logging, visual DAG | Flow |
 | **Modern Python tooling** | `uv`, `ruff`, `mypy`, `pre-commit`, GitHub Actions CI | Repo |
 
@@ -110,6 +113,8 @@ flowchart TD
     L["nlp_terms.jsonl\nNLP extraction\n(notebook 05)"]
     M["outputs/clinical_insight.png\n(notebook 06)"]
     N["Interactive Dashboard\nPDF/PNG export\n(notebook 09)"]
+    O["OpenLineage Events\nbuild_silver · build_gold\n(log or OpenMetadata backend)"]
+    P["Backfill\nbuild_silver_for_range()\n(notebook 10)"]
 
     A --> C
     B --> C
@@ -122,10 +127,14 @@ flowchart TD
     F --> H
     F --> I
     F --> J
+    F --> O
     G --> M
     G --> N
+    G --> O
     H --> N
     L --> M
+    D --> P
+    P --> F
 ```
 
 ### Pipeline Execution Sequence
@@ -498,7 +507,7 @@ uv run pre-commit install
 
 ## Running the Notebooks
 
-Run notebooks in order 00 → 08. Each builds on the outputs of the previous one.
+Run notebooks in order 00 → 10. Each builds on the outputs of the previous one.
 
 ```bash
 # Open a specific notebook (browser opens at http://localhost:2718)
@@ -517,8 +526,9 @@ uv run marimo edit notebooks/00_introduction.py
 | `07` | Medallion architecture + SCD Type 2 | Veracity, Volume |
 | `08` | Streaming simulation via generators + DuckDB | Velocity |
 | `09` | Interactive dashboard, reactive filters, PDF/PNG export | All four |
+| `10` | Backfill — partition-level re-processing of Bronze → Silver → Gold for a date range | Veracity |
 
-> Run notebooks 01–02 before 03–09 (they populate `lake/` which later notebooks read).
+> Run notebooks 01–02 before 03–10 (they populate `lake/` which later notebooks read).
 
 ---
 
@@ -537,13 +547,30 @@ uv run python flows/pipeline_flow.py
 Open **http://localhost:4200** to watch the pipeline run in real time, see task retries, and inspect structured logs.
 
 The Prefect flow runs all steps in order:
-1. Parallel fetch (8 tasks — 4 drugs × 2 sources)
+1. Parallel fetch (8 tasks — 4 drugs × 2 sources) — payloads validated against Pydantic contracts
 2. Write to Bronze lake
 3. Polars transformation + veracity report
-4. Build Silver layer (`silver.prescribing`)
-5. Build Gold layer (`gold.drug_summary`, `gold.drug_monthly_spend`, `gold.practice_leaderboard`)
-6. Build SCD Type 2 dimension (`gold.dim_practice`)
-7. NLP term extraction per drug
+4. Build Silver layer (`silver.prescribing`) — lineage event emitted
+5. **DQ gate** — `validate_silver_task` checks null-rate thresholds; fails the flow if breached
+6. Build Gold layer (`gold.drug_summary`, `gold.drug_monthly_spend`, `gold.practice_leaderboard`) — lineage event emitted
+7. Build SCD Type 2 dimension (`gold.dim_practice`)
+8. NLP term extraction per drug
+
+**Optional: lineage backend**
+
+Set `OPENLINEAGE_URL` to POST lineage events to a running OpenMetadata instance.
+Without it, lineage events are logged as structured JSON — no extra infra needed.
+
+```bash
+# Run OpenMetadata locally (requires Docker Compose):
+curl -sL https://github.com/open-metadata/OpenMetadata/releases/latest/download/docker-compose.yml \
+  | docker compose -f - up -d
+
+# Open http://localhost:8585 for the OpenMetadata UI (default login: admin / admin)
+
+# Then run the pipeline with lineage emission:
+OPENLINEAGE_URL=http://localhost:8585 uv run python flows/pipeline_flow.py
+```
 
 ---
 
@@ -560,15 +587,17 @@ uk-healthcare-big-data-pipeline/
 ├── pyproject.toml                 # uv project, all deps, ruff/mypy/pytest config
 ├── src/
 │   └── pipeline/
-│       ├── fetch.py               # HTTP acquisition — httpx + BeautifulSoup
+│       ├── fetch.py               # HTTP acquisition — httpx + BeautifulSoup + Pydantic validation
 │       ├── lake.py                # Bronze layer read/write (JSONL + JSON)
-│       ├── medallion.py           # Silver + Gold + SCD Type 2 (DuckDB)
+│       ├── medallion.py           # Silver + Gold + SCD Type 2 + backfill (DuckDB)
+│       ├── contracts.py           # Pydantic data contracts + SilverDQViolation
+│       ├── lineage.py             # OpenLineage event emission (log-only or OpenMetadata backend)
 │       ├── stream.py              # Streaming simulation — generator + DuckDB sink
 │       ├── transform.py           # Polars lazy transforms + veracity report
 │       ├── nlp.py                 # Tokenisation + term frequency (Polars)
 │       └── visualise.py           # matplotlib chart functions
 ├── flows/
-│   └── pipeline_flow.py           # Prefect @flow + @task with retries
+│   └── pipeline_flow.py           # Prefect @flow + @task with retries, DQ gate, lineage
 ├── notebooks/
 │   ├── 00_introduction.py         # Why pipelines? The 4 V's. Architecture.
 │   ├── 01_parallel_fetch.py       # ThreadPoolExecutor — Volume + Velocity
@@ -578,12 +607,19 @@ uk-healthcare-big-data-pipeline/
 │   ├── 05_nlp_unstructured.py     # Clinical text NLP — Variety
 │   ├── 06_join_and_visualise.py   # DuckDB JOIN + matplotlib 2×2 — all 4 V's
 │   ├── 07_medallion_architecture.py  # Bronze → Silver → Gold + SCD Type 2
-│   └── 08_streaming_simulation.py    # Streaming via generators + DuckDB
+│   ├── 08_streaming_simulation.py    # Streaming via generators + DuckDB
+│   ├── 09_dashboard_report.py        # Interactive dashboard + PDF/PNG export
+│   └── 10_backfill.py               # Partition-level backfill + idempotency
 ├── tests/
 │   ├── test_fetch.py              # Mock httpx; response shape + keys
 │   ├── test_transform.py          # Polars lazy frame + veracity report
 │   ├── test_nlp.py                # Tokeniser + top_terms
-│   ├── test_medallion.py          # Silver, Gold, and SCD Type 2
+│   ├── test_medallion.py          # Silver, Gold, SCD Type 2, backfill
+│   ├── test_contracts.py          # Pydantic models + DQ gate
+│   ├── test_lineage.py            # Lineage event structure + context manager
+│   ├── test_lake.py               # Bronze read/write + atomic writes
+│   ├── test_stream.py             # Generator batching + DuckDB sink
+│   ├── test_visualise.py          # Chart rendering + export
 │   └── test_pipeline.py           # @pytest.mark.slow — live API integration tests
 └── lake/                          # Created at runtime, gitignored (Bronze layer)
 ```
@@ -606,7 +642,7 @@ uv run ruff check src/ flows/
 uv run mypy src/
 ```
 
-Current test count: **68 unit tests** across fetch, transform, NLP, and medallion (Silver, Gold, SCD Type 2).
+Current test count: **190+ unit tests** across fetch, transform, NLP, medallion (Silver, Gold, SCD Type 2, backfill), data contracts, lineage, lake, stream, and visualise.
 
 ---
 
@@ -617,6 +653,7 @@ This repository includes a `.devcontainer/devcontainer.json` configuration. Clic
 Ports forwarded:
 - **2718** — Marimo notebook UI
 - **4200** — Prefect orchestration UI
+- **8585** — OpenMetadata UI + lineage API (optional; start with Docker Compose)
 
 ---
 
@@ -662,10 +699,40 @@ Ports forwarded:
 - [NHS Digital — Data and Information](https://digital.nhs.uk/data-and-information) — secondary uses and hospital episode statistics
 - [Bennett Institute for Applied Data Science](https://www.bennett.ox.ac.uk/) — Oxford team that builds and maintains OpenPrescribing
 
+### Data Contracts & Quality
+- [Pydantic Documentation](https://docs.pydantic.dev/) — data validation and settings management using Python type annotations
+- [Great Expectations](https://greatexpectations.io/) — declarative data quality testing framework for production pipelines
+- [Monte Carlo Data](https://www.montecarlodata.com/) — data observability platform used at scale
+- [dbt Tests](https://docs.getdbt.com/docs/build/tests) — SQL-based data quality assertions integrated with dbt transformations
+
+### Lineage & Observability
+- [OpenLineage Specification](https://openlineage.io/) — vendor-neutral standard for capturing data lineage events
+- [OpenMetadata](https://open-metadata.org/) — open-source data catalogue with native OpenLineage ingestion, column-level lineage, and data quality integration
+- [OpenMetadata](https://open-metadata.org/) — broader data catalogue that ingests OpenLineage events alongside schema metadata
+- [Prefect + OpenLineage](https://docs.prefect.io/latest/guides/openlineage/) — official Prefect integration for automatic lineage emission from flows
+
+### Backfill & Partition Management
+- [Delta Lake — Time Travel](https://docs.delta.io/latest/delta-utility.html#restore-a-delta-table-to-an-earlier-state) — how Delta Lake handles re-processing with MERGE and time travel
+- [Apache Iceberg — Partitioning](https://iceberg.apache.org/docs/latest/partitioning/) — hidden partitioning that makes backfill scans efficient
+- [Kafka — Offset Management](https://kafka.apache.org/documentation/#consumerconfigs_auto.offset.reset) — how Kafka consumers replay historical messages for backfill
+
+### Future: Distributed Extensions
+This pipeline deliberately runs on a single node (DuckDB + Polars) so you can focus on architecture, not infrastructure.  When you are ready to scale to distributed systems, the architectural patterns transfer directly:
+
+| Single-node (this pipeline) | Distributed equivalent | What changes |
+|-----------------------------|------------------------|-------------|
+| `duckdb.connect()` SQL | Apache Spark + `pyspark.sql` | Replace connection with `SparkSession`; SQL syntax is nearly identical |
+| JSONL files in `lake/` | Delta Lake or Apache Iceberg on S3/GCS | Replace file writes with `df.write.format("delta").save(path)`; ACID guarantees at scale |
+| Python generator stream | Apache Kafka consumer | Replace `prescribing_event_stream()` with `KafkaConsumer`; batch logic is unchanged |
+| DuckDB `DELETE` + `INSERT` backfill | Delta Lake `MERGE INTO` | MERGE handles upserts atomically and records history in the transaction log |
+| `validate_silver_task` null checks | Great Expectations suite | Replace threshold dict with a GE `ExpectationSuite`; same concept, declarative YAML |
+| `lineage.py` log-only mode | Full OpenMetadata | Set `OPENLINEAGE_URL=http://localhost:8585`; no code changes needed |
+
+**Recommended next step:** replace the DuckDB storage layer with Delta Lake by swapping `medallion.py` for a PySpark + `delta` session.  The Bronze lake stays unchanged; only Silver/Gold writes use Delta format.  This unlocks time travel, MERGE-based backfill, and concurrent writer safety.
+
 ### General Data Engineering
 - [Pessini's Pipeline Guide](https://pessini.medium.com/building-end-to-end-data-pipelines-a-hands-on-guide-for-data-scientists-part-1-adcdc7bce22a) — the article that inspired this course
 - *Fundamentals of Data Engineering* — Reis & Housley (O'Reilly, 2022) — best single book on the field
-- [Great Expectations](https://greatexpectations.io/) — data quality testing framework used in production pipelines
 
 ---
 

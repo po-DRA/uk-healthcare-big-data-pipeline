@@ -17,12 +17,15 @@ import re
 
 import httpx
 from bs4 import BeautifulSoup
+from pydantic import ValidationError
 from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential_jitter,
 )
+
+from pipeline.contracts import NHSPagesPayload, OpenPrescribingPayload
 
 _log = logging.getLogger(__name__)
 
@@ -113,7 +116,7 @@ def fetch_openprescribing(drug_bnf_code: str, drug_name: str) -> dict:
             "items": item.get("items"),
             "quantity": item.get("quantity"),
             "row_id": f"{item.get('row_id', '')}",
-            "setting": item.get("setting", ""),
+            "setting": str(item.get("setting", "")),
             "ccg": item.get("pct_id", ""),
             "drug": drug_name,
         }
@@ -121,13 +124,19 @@ def fetch_openprescribing(drug_bnf_code: str, drug_name: str) -> dict:
     ]
 
     _log.info("%s: %d records fetched", drug_name, len(records))
-    return {
+    payload = {
         "drug": drug_name,
         "bnf_code": drug_bnf_code,
         "type": "openprescribing",
         "total_rows": len(records),
         "records": records,
     }
+    try:
+        return OpenPrescribingPayload.model_validate(payload).model_dump()
+    except ValidationError as exc:
+        raise ValueError(
+            f"fetch_openprescribing contract violation for {drug_name!r}: {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -242,8 +251,14 @@ def fetch_nhs_pages(drug_name: str) -> dict:
                 )
 
     _log.info("%s: %d sections extracted across NHS pages", drug_name, len(pages))
-    return {
+    payload = {
         "drug": drug_name,
         "type": "nhs_pages",
         "pages": pages,
     }
+    try:
+        return NHSPagesPayload.model_validate(payload).model_dump()
+    except ValidationError as exc:
+        raise ValueError(
+            f"fetch_nhs_pages contract violation for {drug_name!r}: {exc}"
+        ) from exc

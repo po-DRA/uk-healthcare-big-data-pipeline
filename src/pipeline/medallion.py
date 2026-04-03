@@ -147,6 +147,162 @@ def build_silver(
     return row_count
 
 
+def build_silver_for_range(
+    lake_dir: pathlib.Path,
+    db_path: pathlib.Path,
+    from_month: str,
+    to_month: str,
+) -> int:
+    """Re-process a date-range partition of Silver — the backfill operation.
+
+    This is **partition-level idempotency**: instead of rebuilding the entire
+    Silver table, we delete only the rows whose ``year_month`` falls within
+    the requested range and re-insert from Bronze.
+
+    Why this matters
+    ----------------
+    Full-table rebuilds (``build_silver``) are fine when the Bronze lake is
+    small.  At scale, re-reading years of history just to fix one month is
+    expensive.  Partition-level backfill solves this:
+
+    1. **Delete** only the target months from Silver.
+    2. **Re-read** Bronze files, filtering to the same months.
+    3. **Insert** the corrected rows.
+
+    The result is identical to a full rebuild for the affected range, but
+    leaves untouched months exactly as they were.
+
+    Common backfill scenarios
+    -------------------------
+    - A new drug is added to ``DRUG_CODES``: fetch its Bronze files, then
+      backfill Silver/Gold so the new drug appears in all historical reports.
+    - A Silver transformation bug is fixed: backfill the affected month range
+      to apply the correct logic without touching other months.
+    - A schema change adds a column: a full rebuild is simpler, but a range
+      backfill works equally well when the column is derived from existing data.
+
+    Parameters
+    ----------
+    lake_dir:
+        Root of the Bronze lake, e.g. ``Path("lake")``.
+    db_path:
+        Path to the DuckDB file containing ``silver.prescribing``.
+    from_month:
+        Start of the backfill window, inclusive, as ``"YYYY-MM"``,
+        e.g. ``"2023-01"``.
+    to_month:
+        End of the backfill window, inclusive, as ``"YYYY-MM"``,
+        e.g. ``"2023-12"``.
+
+    Returns
+    -------
+    int
+        Number of rows inserted into ``silver.prescribing`` for the range.
+
+    Raises
+    ------
+    RuntimeError
+        If ``silver.prescribing`` does not yet exist.  Run ``build_silver``
+        first to create the table, then use this function for subsequent
+        partial updates.
+
+    Example
+    -------
+    ::
+
+        # Add lisinopril Bronze files, then backfill only 2023
+        rows = build_silver_for_range(
+            lake_dir=Path("lake"),
+            db_path=Path("pipeline.duckdb"),
+            from_month="2023-01",
+            to_month="2023-12",
+        )
+        print(f"Backfilled {rows:,} rows for 2023-01 → 2023-12")
+    """
+    glob_pattern = str(lake_dir / "*" / "prescribing.jsonl")
+
+    with duckdb.connect(str(db_path)) as con:
+        _ensure_schemas(con)
+
+        # Verify Silver table exists — backfill requires a pre-existing table.
+        exists: bool = con.execute(
+            """
+            SELECT COUNT(*) > 0
+            FROM information_schema.tables
+            WHERE table_schema = 'silver' AND table_name = 'prescribing'
+            """
+        ).fetchone()[0]
+
+        if not exists:
+            raise RuntimeError(
+                "silver.prescribing does not exist. "
+                "Run build_silver() first to create the full Silver table, "
+                "then use build_silver_for_range() for partial updates."
+            )
+
+        # Step 1: Delete existing Silver rows for the target date range.
+        # This makes the operation idempotent: running it twice produces
+        # the same result as running it once.
+        deleted: int = con.execute(
+            "DELETE FROM silver.prescribing WHERE year_month BETWEEN ? AND ?",
+            [from_month, to_month],
+        ).fetchone()[0]
+
+        _log.info(
+            "Backfill: deleted %d Silver rows for %s → %s",
+            deleted,
+            from_month,
+            to_month,
+        )
+
+        # Step 2: Re-read Bronze and insert only the rows in the target range.
+        # The WHERE clause on year_month filters at read time — DuckDB pushes
+        # this predicate down into the JSON scan for efficiency.
+        con.execute(
+            f"""
+            INSERT INTO silver.prescribing
+            SELECT
+                TRY_CAST(date AS DATE)                                       AS date,
+                TRY_CAST(actual_cost AS DOUBLE)                              AS actual_cost,
+                TRY_CAST(items       AS BIGINT)                              AS items,
+                TRY_CAST(quantity    AS DOUBLE)                              AS quantity,
+                row_id,
+                setting,
+                ccg,
+                drug,
+                ROUND(
+                    TRY_CAST(actual_cost AS DOUBLE)
+                    / NULLIF(TRY_CAST(items AS BIGINT), 0),
+                    4
+                )                                                            AS nic_per_item,
+                STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')                   AS year_month,
+                now()                                                        AS ingested_at
+            FROM read_json(
+                '{glob_pattern}',
+                format      = 'newline_delimited',
+                auto_detect = true
+            )
+            WHERE
+                NOT (actual_cost IS NULL AND items IS NULL)
+                AND STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')
+                    BETWEEN '{from_month}' AND '{to_month}'
+            """,
+        )
+
+        inserted: int = con.execute(
+            "SELECT COUNT(*) FROM silver.prescribing WHERE year_month BETWEEN ? AND ?",
+            [from_month, to_month],
+        ).fetchone()[0]
+
+    _log.info(
+        "Backfill complete: %d rows inserted into silver.prescribing for %s → %s",
+        inserted,
+        from_month,
+        to_month,
+    )
+    return inserted
+
+
 def build_dim_practice(
     db_path: pathlib.Path = pathlib.Path("pipeline.duckdb"),
 ) -> int:
