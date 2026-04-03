@@ -13,3 +13,6 @@ dist/
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
+.coverage
+coverage.xml
+src/pipeline/uk-healthcare-big-data-pipeline.code-workspace

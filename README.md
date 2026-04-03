@@ -435,8 +435,7 @@ This is the same parameter you tune in Spark Structured Streaming (`trigger(proc
 
 All four use cases are a natural fit for **Redpanda** as the broker: low-latency ingestion, Kafka-compatible consumers (Spark Structured Streaming, Flink, ksqlDB), and straightforward single-node deployment for a trust-level proof of concept before scaling out.
 
-> 📖 Read more: [Streaming 101 - O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) · [Kafka Quickstart](https://kafka.apache.org/quickstart) · [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/) · [Spark Structured Streaming](https://spark.apache.org/docs/3.5.1/structured-streaming-programming-guide.html)
-
+> 📖 Read more: [Streaming 101 - O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) · [Kafka Quickstart](https://kafka.apache.org/quickstart) · [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/)
 ---
 
 ### 4. Slowly Changing Dimensions (SCD Type 2)
@@ -697,7 +696,6 @@ Ports forwarded:
 - [The World Beyond Batch: Streaming 101 - Tyler Akidau, O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) - the best conceptual introduction to streaming
 - [Apache Kafka Introduction](https://kafka.apache.org/intro) - the industry-standard message broker
 - [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/) - Kafka-compatible broker, no ZooKeeper, easier to operate; well-suited for single-trust or on-prem NHS deployments
-- [Spark Structured Streaming Guide](https://spark.apache.org/docs/3.5.1/structured-streaming-programming-guide.html) - micro-batch streaming at scale
 - [httpx Streaming Responses](https://www.python-httpx.org/quickstart/#streaming-responses) - HTTP-level chunked streaming
 
 ### Slowly Changing Dimensions (SCD)
