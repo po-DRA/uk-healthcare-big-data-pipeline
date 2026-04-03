@@ -59,9 +59,9 @@ import json
 import logging
 import os
 import uuid
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import UTC, datetime
-from collections.abc import Generator
 
 _log = logging.getLogger(__name__)
 
