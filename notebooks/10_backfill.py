@@ -137,7 +137,7 @@ def __(DB_PATH, duckdb):
 
     print(f"Silver rows before backfill: {_total_before:,}")
     print(_before.to_string(index=False))
-    _before
+    _before  # noqa: B018 — Marimo cell return value, rendered as output
 
 
 @app.cell
@@ -192,7 +192,7 @@ def __(BACKFILL_FROM, BACKFILL_TO, DB_PATH, LAKE_DIR, build_silver_for_range):
         to_month=BACKFILL_TO,
     )
     print(f"Rows inserted for {BACKFILL_FROM} → {BACKFILL_TO}: {_inserted:,}")
-    _inserted
+    _inserted  # noqa: B018 — Marimo cell return value, rendered as output
 
 
 @app.cell
@@ -219,7 +219,7 @@ def __(BACKFILL_FROM, BACKFILL_TO, DB_PATH, LAKE_DIR, build_silver_for_range):
     )
     print(f"Second run — rows in window: {_inserted_2:,}")
     print("✓ Idempotent: same result whether run once or twice")
-    _inserted_2
+    _inserted_2  # noqa: B018 — Marimo cell return value, rendered as output
 
 
 @app.cell
@@ -254,7 +254,7 @@ def __(DB_PATH, duckdb):
     _con.close()
 
     print(f"Silver rows after backfill: {_total_after:,}")
-    _after
+    _after  # noqa: B018 — Marimo cell return value, rendered as output
 
 
 @app.cell
@@ -279,7 +279,7 @@ def __(DB_PATH, build_gold):
     _gold_counts = build_gold(DB_PATH)
     for _table, _n in _gold_counts.items():
         print(f"  {_table}: {_n:,} rows")
-    _gold_counts
+    _gold_counts  # noqa: B018 — Marimo cell return value, rendered as output
 
 
 @app.cell
@@ -320,7 +320,7 @@ def __(BACKFILL_FROM, BACKFILL_TO, DB_PATH, duckdb):
     _con.close()
     print("Backfilled rows with ingested_at timestamps:")
     print(_audit.to_string(index=False))
-    _audit
+    _audit  # noqa: B018 — Marimo cell return value, rendered as output
 
 
 @app.cell
