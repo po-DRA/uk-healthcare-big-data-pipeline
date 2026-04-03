@@ -60,8 +60,8 @@ import logging
 import os
 import uuid
 from contextlib import contextmanager
-from datetime import datetime, timezone
-from typing import Generator
+from datetime import UTC, datetime
+from collections.abc import Generator
 
 _log = logging.getLogger(__name__)
 
@@ -149,7 +149,7 @@ def emit_lineage_event(
     """
     event: dict = {
         "eventType": state,
-        "eventTime": datetime.now(timezone.utc).isoformat(),
+        "eventTime": datetime.now(UTC).isoformat(),
         "run": {"runId": run_id},
         "job": {"namespace": NAMESPACE, "name": job_name},
         "inputs": inputs or [],
