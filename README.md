@@ -10,10 +10,26 @@ You will build a complete pipeline that fetches NHS prescribing records and clin
 
 ---
 
+## Quick Start
+
+**Recommended: GitHub Codespaces (no install needed)**
+
+1. Fork this repo → click **Code → Codespaces → Create codespace on master**
+2. Wait ~2 minutes for setup to complete
+3. In the terminal: `uv run pytest` — you should see `193 passed`
+4. Open the first notebook: `uv run marimo edit notebooks/00_introduction.py`
+5. Follow the **[Lab Guide (LABS.md)](LABS.md)** — 11 labs in order, ~4-5 hours total
+
+**Local setup:** `git clone` → `uv sync --all-groups` → `uv run pytest`
+
+---
+
 ## Contents
 
-1. [Who This Is For](#who-this-is-for)
-2. [What You Will Learn](#what-you-will-learn)
+1. [Quick Start](#quick-start)
+2. [Lab Guide](LABS.md) - step-by-step labs 00-10
+3. [Who This Is For](#who-this-is-for)
+4. [What You Will Learn](#what-you-will-learn)
 3. [Data Sources](#data-sources)
 4. [Architecture](#architecture)
 5. [Key Concepts Explained](#key-concepts-explained)
