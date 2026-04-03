@@ -38,22 +38,36 @@ You will build a complete pipeline that fetches NHS prescribing records and clin
 
 ## What You Will Learn
 
-| Concept | What you build | Notebook |
-|---------|---------------|----------|
-| **The 4 V's of big data** | See Volume, Velocity, Variety, Veracity in live NHS data | 01–06 |
-| **Parallel data fetching** | `ThreadPoolExecutor` cuts fetch time several-fold | 01 |
-| **Bronze data lake** | Raw JSONL + JSON files, write-once, never modified | 02 |
-| **DuckDB SQL analytics** | Query raw lake files with SQL - no database server | 03 |
-| **Polars lazy evaluation** | Transform millions of records without loading into RAM | 04 |
-| **NLP on clinical text** | Term-frequency analysis on NHS.uk patient pages | 05 |
-| **Medallion architecture** | Bronze → Silver (DuckDB) → Gold (DuckDB) | 07 |
-| **SCD Type 2** | Track GP practice attribute changes over time | 07 |
-| **Streaming simulation** | Micro-batch ingestion via Python generators + DuckDB | 08 |
-| **Data contracts** | Pydantic models enforce schema at the API boundary; DQ gate halts the pipeline on null-rate breaches | Flow |
-| **Lineage tracking** | OpenLineage-format events emitted from Prefect tasks; log-only mode needs no backend | Flow |
-| **Backfill** | Partition-level re-processing of Silver/Gold for a date range; idempotency proof | 10 |
-| **Prefect orchestration** | `@flow` / `@task` with retries, logging, visual DAG | Flow |
-| **Modern Python tooling** | `uv`, `ruff`, `mypy`, `pre-commit`, GitHub Actions CI | Repo |
+This course uses **Marimo notebooks** for interactive exploration and a **modular Python pipeline** for production-grade patterns — deliberately combining both.
+
+That reflects a real and ongoing debate in the field. Notebooks are not inherently unproductive: tools like Marimo, Papermill, and Ploomber can run notebooks as pipeline steps, and organisations like Netflix and Databricks have done exactly that at scale. Data scientists and academics often prefer notebooks for the narrative, interactivity, and reproducibility they offer. Data engineers and MLOps practitioners tend to reach for modular code when they need testability, CI/CD, and audit trails.
+
+The right choice depends on what you need right now:
+
+| You need... | Reach for... |
+|-------------|-------------|
+| Explore data, share findings, iterate fast | A notebook (Jupyter, Marimo) |
+| Run a notebook on a schedule with parameters | Papermill or Prefect + Marimo |
+| Test individual functions, enforce contracts, track lineage | Modular code + orchestrator (this pipeline) |
+
+This course teaches the patterns in the third row - not because notebooks are wrong, but because knowing when and how to move beyond them is a skill of its own.
+
+| Concept | Why it matters | What you build | Notebook |
+|---------|---------------|----------------|----------|
+| **The 4 V's of big data** | Healthcare data is simultaneously huge, fast-changing, structurally inconsistent, and untrustworthy - you need a mental model before you can design solutions | See Volume, Velocity, Variety, Veracity in live NHS data | 01-06 |
+| **Parallel data fetching** | Sequential fetching of 8 endpoints takes 4x longer; real pipelines cannot afford to wait | `ThreadPoolExecutor` cuts fetch time several-fold | 01 |
+| **Bronze data lake** | If your transform logic is wrong you need to re-derive from raw, not re-fetch from the API | Raw JSONL + JSON files, write-once, never modified | 02 |
+| **DuckDB SQL analytics** | Pandas loads everything into RAM; DuckDB queries files directly - the difference matters when data exceeds memory | Query raw lake files with SQL - no database server | 03 |
+| **Polars lazy evaluation** | Pandas processes eagerly; lazy evaluation lets the engine optimise before touching data | Transform millions of records without loading into RAM | 04 |
+| **NLP on clinical text** | 80% of healthcare data is unstructured text - ignoring it means ignoring most of the signal | Term-frequency analysis on NHS.uk patient pages | 05 |
+| **Medallion architecture** | Without layers, a bug in Silver corrupts Gold silently; layers make it fixable without re-fetching | Bronze -> Silver (DuckDB) -> Gold (DuckDB) | 07 |
+| **SCD Type 2** | NHS reorganised 106 CCGs into 42 ICBs in 2022 - without versioned dimensions, historical reports silently mis-attribute spend | Track GP practice attribute changes over time | 07 |
+| **Streaming simulation** | Batch pipelines are blind to what is happening right now; knowing when to stream vs batch is a core engineering decision | Micro-batch ingestion via Python generators + DuckDB | 08 |
+| **Data contracts** | Without contracts, a malformed API response becomes a silent NULL in Silver; contracts fail fast at the boundary | Pydantic models enforce schema at the API boundary; DQ gate halts the pipeline on null-rate breaches | Flow |
+| **Lineage tracking** | When Gold figures change unexpectedly, lineage tells you which upstream change caused it | OpenLineage-format events emitted from Prefect tasks; log-only mode needs no backend | Flow |
+| **Backfill** | When you fix a bug or add a new drug, you need to re-process history safely without touching unaffected data | Partition-level re-processing of Silver/Gold for a date range; idempotency proof | 10 |
+| **Prefect orchestration** | Cron jobs have no retry logic, no UI, and no partial failure handling - orchestrators solve all three | `@flow` / `@task` with retries, logging, visual DAG | Flow |
+| **Modern Python tooling** | Catching bugs before they reach production is cheaper than fixing them after | `uv`, `ruff`, `mypy`, `pre-commit`, GitHub Actions CI | Repo |
 
 ---
 
