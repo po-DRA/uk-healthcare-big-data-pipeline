@@ -160,7 +160,7 @@ def lake_summary(base_dir: pathlib.Path) -> list[dict]:
     list[dict]
         Each dict has keys: drug, file, size_bytes, size_kb.
     """
-    summary = []
+    summary: list[dict] = []
     if not base_dir.exists():
         return summary
 

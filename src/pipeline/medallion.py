@@ -135,9 +135,10 @@ def build_silver(
             """
         )
 
-        row_count: int = con.execute(
-            "SELECT COUNT(*) FROM silver.prescribing_new"
-        ).fetchone()[0]
+        row_count: int = (
+            con.execute("SELECT COUNT(*) FROM silver.prescribing_new").fetchone()
+            or (0,)
+        )[0]
 
         # Atomic swap: drop old, rename new → readers never see an empty table
         con.execute("DROP TABLE IF EXISTS silver.prescribing")
@@ -225,13 +226,16 @@ def build_silver_for_range(
         _ensure_schemas(con)
 
         # Verify Silver table exists — backfill requires a pre-existing table.
-        exists: bool = con.execute(
-            """
-            SELECT COUNT(*) > 0
-            FROM information_schema.tables
-            WHERE table_schema = 'silver' AND table_name = 'prescribing'
-            """
-        ).fetchone()[0]
+        exists: bool = (
+            con.execute(
+                """
+                SELECT COUNT(*) > 0
+                FROM information_schema.tables
+                WHERE table_schema = 'silver' AND table_name = 'prescribing'
+                """
+            ).fetchone()
+            or (False,)
+        )[0]
 
         if not exists:
             raise RuntimeError(
@@ -243,10 +247,13 @@ def build_silver_for_range(
         # Step 1: Delete existing Silver rows for the target date range.
         # This makes the operation idempotent: running it twice produces
         # the same result as running it once.
-        deleted: int = con.execute(
-            "DELETE FROM silver.prescribing WHERE year_month BETWEEN ? AND ?",
-            [from_month, to_month],
-        ).fetchone()[0]
+        deleted: int = (
+            con.execute(
+                "DELETE FROM silver.prescribing WHERE year_month BETWEEN ? AND ?",
+                [from_month, to_month],
+            ).fetchone()
+            or (0,)
+        )[0]
 
         _log.info(
             "Backfill: deleted %d Silver rows for %s → %s",
@@ -289,10 +296,13 @@ def build_silver_for_range(
             """,
         )
 
-        inserted: int = con.execute(
-            "SELECT COUNT(*) FROM silver.prescribing WHERE year_month BETWEEN ? AND ?",
-            [from_month, to_month],
-        ).fetchone()[0]
+        inserted: int = (
+            con.execute(
+                "SELECT COUNT(*) FROM silver.prescribing WHERE year_month BETWEEN ? AND ?",
+                [from_month, to_month],
+            ).fetchone()
+            or (0,)
+        )[0]
 
     _log.info(
         "Backfill complete: %d rows inserted into silver.prescribing for %s → %s",
@@ -403,12 +413,15 @@ def build_dim_practice(
             """
         )
 
-        row_count: int = con.execute(
-            "SELECT COUNT(*) FROM gold.dim_practice"
-        ).fetchone()[0]
-        changed: int = con.execute(
-            "SELECT COUNT(*) FROM gold.dim_practice WHERE version_num > 1"
-        ).fetchone()[0]
+        row_count: int = (
+            con.execute("SELECT COUNT(*) FROM gold.dim_practice").fetchone() or (0,)
+        )[0]
+        changed: int = (
+            con.execute(
+                "SELECT COUNT(*) FROM gold.dim_practice WHERE version_num > 1"
+            ).fetchone()
+            or (0,)
+        )[0]
 
     _log.info(
         "gold.dim_practice: %d rows (%d practice-versions with changed attributes)",
@@ -539,7 +552,9 @@ def build_gold(
             "gold.drug_monthly_spend",
             "gold.practice_leaderboard",
         ):
-            counts[table] = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            counts[table] = (
+                con.execute(f"SELECT COUNT(*) FROM {table}").fetchone() or (0,)
+            )[0]
             _log.info("%s: %d rows", table, counts[table])
 
     return counts
