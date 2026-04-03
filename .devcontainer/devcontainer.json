@@ -1,8 +1,11 @@
 {
   "name": "UK Healthcare Big Data Pipeline",
   "image": "mcr.microsoft.com/devcontainers/python:3.11",
-  "postCreateCommand": "pip install uv && uv sync --all-extras && uv run pre-commit install",
-  "forwardPorts": [2718, 4200],
+  "features": {
+    "ghcr.io/astral-sh/uv/devcontainer-feature:1": {}
+  },
+  "postCreateCommand": "uv sync --all-groups && uv run pre-commit install",
+  "forwardPorts": [2718, 4200, 8585],
   "portsAttributes": {
     "2718": {
       "label": "Marimo notebooks",
@@ -11,6 +14,10 @@
     "4200": {
       "label": "Prefect UI",
       "onAutoForward": "notify"
+    },
+    "8585": {
+      "label": "OpenMetadata UI (optional)",
+      "onAutoForward": "ignore"
     }
   },
   "customizations": {

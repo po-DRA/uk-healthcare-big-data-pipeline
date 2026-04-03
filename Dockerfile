@@ -24,8 +24,8 @@
 
 FROM python:3.11-slim
 
-# Copy uv binary from the official image — avoids installing via pip
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+# Copy uv binary from the official image — pinned to a minor version for reproducibility
+COPY --from=ghcr.io/astral-sh/uv:0.6 /uv /usr/local/bin/uv
 
 # Set working directory
 WORKDIR /app
@@ -38,7 +38,8 @@ COPY pyproject.toml uv.lock ./
 # Install all dependencies into .venv (including dev deps for tests)
 # --frozen: use the exact versions in uv.lock (reproducible builds)
 # --no-cache: keep the image small
-RUN uv sync --frozen --no-cache
+# --all-groups: include the dev dependency group (pytest, ruff, mypy)
+RUN uv sync --frozen --no-cache --all-groups
 
 # Copy application source
 COPY src/       src/
