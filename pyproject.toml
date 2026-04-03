@@ -53,6 +53,7 @@ python_version = "3.11"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = [
   "slow: marks tests that make live API calls (deselect with -m 'not slow')",
 ]
