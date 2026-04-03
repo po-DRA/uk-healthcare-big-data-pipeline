@@ -33,7 +33,7 @@ WORKDIR /app
 # Copy dependency specification first so Docker can cache this layer.
 # The layer is only invalidated when pyproject.toml or uv.lock changes,
 # not when source code changes — keeping rebuilds fast.
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Install all dependencies into .venv (including dev deps for tests)
 # --frozen: use the exact versions in uv.lock (reproducible builds)
