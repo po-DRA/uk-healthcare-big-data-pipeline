@@ -300,9 +300,9 @@ NHS BSA publishes prescribing data **monthly**, but real-time NHS systems - NHS 
 - Prefect `@task(retries=2, retry_delay_seconds=exponential_backoff(...))` handles transient API failures automatically
 - Notebook 08 simulates streaming ingestion: records are replayed as micro-batches via a Python generator and inserted into DuckDB incrementally
 
-**Real-world implication:** An NHS 111 surge detection system cannot wait for a nightly batch job. Streaming micro-batch processing (Kafka, Kinesis, or the generator pattern here) reduces latency from hours to seconds.
+**Real-world implication:** An NHS 111 surge detection system cannot wait for a nightly batch job. Streaming micro-batch processing (Kafka, Redpanda, Kinesis, or the generator pattern here) reduces latency from hours to seconds.
 
-> 📖 Read more: [Streaming 101 - Tyler Akidau, O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) · [Apache Kafka Introduction](https://kafka.apache.org/intro)
+> 📖 Read more: [Streaming 101 - Tyler Akidau, O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) · [Apache Kafka Introduction](https://kafka.apache.org/intro) · [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/)
 
 ---
 
@@ -424,7 +424,7 @@ The code that *receives* the batch and writes to DuckDB is identical in both cas
 - **Small batch** (e.g. 10 records): low latency (dashboard updates frequently), high overhead (many insert operations)
 - **Large batch** (e.g. 10,000 records): high throughput, higher latency
 
-This is the same parameter you tune in Spark Structured Streaming (`trigger(processingTime="30 seconds")`) or Kafka Streams.
+This is the same parameter you tune in Spark Structured Streaming (`trigger(processingTime="30 seconds")`) or Kafka Streams. In production you would replace the Python generator with a **Kafka** topic or **Redpanda** (a Kafka-compatible broker written in C++, no ZooKeeper, faster startup - popular in NHS/healthcare orgs that want Kafka semantics without the operational overhead).
 
 #### NHS streaming use cases
 
@@ -433,7 +433,9 @@ This is the same parameter you tune in Spark Structured Streaming (`trigger(proc
 - **Sepsis screening** - stream vital-signs observations; score each patient on every update
 - **Bed capacity management** - stream discharge and admission events; maintain real-time occupancy
 
-> 📖 Read more: [Streaming 101 - O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) · [Kafka Quickstart](https://kafka.apache.org/quickstart) · [Spark Structured Streaming](https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html)
+All four use cases are a natural fit for **Redpanda** as the broker: low-latency ingestion, Kafka-compatible consumers (Spark Structured Streaming, Flink, ksqlDB), and straightforward single-node deployment for a trust-level proof of concept before scaling out.
+
+> 📖 Read more: [Streaming 101 - O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) · [Kafka Quickstart](https://kafka.apache.org/quickstart) · [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/) · [Spark Structured Streaming](https://spark.apache.org/docs/3.5.1/structured-streaming-programming-guide.html)
 
 ---
 
@@ -694,7 +696,8 @@ Ports forwarded:
 ### Streaming
 - [The World Beyond Batch: Streaming 101 - Tyler Akidau, O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) - the best conceptual introduction to streaming
 - [Apache Kafka Introduction](https://kafka.apache.org/intro) - the industry-standard message broker
-- [Spark Structured Streaming Guide](https://spark.apache.org/docs/latest/structured-streaming-programming-guide.html) - micro-batch streaming at scale
+- [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/) - Kafka-compatible broker, no ZooKeeper, easier to operate; well-suited for single-trust or on-prem NHS deployments
+- [Spark Structured Streaming Guide](https://spark.apache.org/docs/3.5.1/structured-streaming-programming-guide.html) - micro-batch streaming at scale
 - [httpx Streaming Responses](https://www.python-httpx.org/quickstart/#streaming-responses) - HTTP-level chunked streaming
 
 ### Slowly Changing Dimensions (SCD)
