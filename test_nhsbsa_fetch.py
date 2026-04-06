@@ -65,7 +65,10 @@ def stream_and_filter(csv_url: str, resource_name: str) -> dict[str, list[dict]]
             for line in lines[:-1]:
                 lines_read += 1
                 if header is None:
-                    header = line.strip().split(",")
+                    # Use csv.reader to handle quoted field names correctly
+                    header = next(csv.reader([line.strip()]))
+                    print(f"  Header parsed: {len(header)} fields, "
+                          f"BNF field index={header.index('BNF_CHEMICAL_SUBSTANCE') if 'BNF_CHEMICAL_SUBSTANCE' in header else 'NOT FOUND'}")
                     continue
                 if not line.strip():
                     continue
