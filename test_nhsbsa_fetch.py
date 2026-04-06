@@ -1,140 +1,111 @@
 """
-Temporary test script — run in Codespaces to find a working NHSBSA fetch approach.
+Temporary test script — run in Codespaces to find a working data source.
 Delete this file after confirmed working.
 
 Usage:
     uv run python test_nhsbsa_fetch.py
 """
-import gzip
-import io
 import json
 import urllib.parse
 import urllib.request
-import zipfile
 
 NHSBSA_API = "https://opendata.nhsbsa.net/api/3/action/datastore_search"
-METFORMIN_BNF = "0601022B0"
 
 
-def test_unfiltered(resource_id: str) -> None:
-    """Baseline: no filter, small limit — should return 200."""
-    print("\n[Test 1] Unfiltered request (known-good baseline)...")
-    params = urllib.parse.urlencode({"resource_id": resource_id, "limit": 2})
+def run(label: str, fn):
+    print(f"\n{label}")
+    try:
+        fn()
+    except Exception as exc:
+        print(f"  FAIL: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# NHSBSA tests
+# ---------------------------------------------------------------------------
+
+def test_nhsbsa_unfiltered():
+    params = urllib.parse.urlencode({"resource_id": "EPD_202503", "limit": 2})
     with urllib.request.urlopen(f"{NHSBSA_API}?{params}", timeout=20) as r:
         d = json.load(r)
-    print(f"  status: {'OK' if d['success'] else 'FAIL'}, total rows: {d['result']['total']:,}")
+    print(f"  OK — total rows: {d['result']['total']:,}, records: {len(d['result']['records'])}")
 
 
-def test_filter_get(resource_id: str) -> None:
-    """Filter via GET with JSON-encoded filters param."""
-    print("\n[Test 2] GET with filters=JSON...")
-    params = urllib.parse.urlencode({
-        "resource_id": resource_id,
-        "limit": 5,
-        "filters": json.dumps({"BNF_CHEMICAL_SUBSTANCE": METFORMIN_BNF}),
-    })
-    try:
-        with urllib.request.urlopen(f"{NHSBSA_API}?{params}", timeout=20) as r:
-            d = json.load(r)
-        print(f"  status: {'OK' if d['success'] else 'FAIL'}, records: {len(d['result']['records'])}, total: {d['result']['total']:,}")
-    except Exception as exc:
-        print(f"  FAIL: {exc}")
-
-
-def test_filter_post(resource_id: str) -> None:
-    """Filter via POST with JSON body."""
-    print("\n[Test 3] POST with JSON body filters...")
-    body = json.dumps({
-        "resource_id": resource_id,
-        "limit": 5,
-        "filters": {"BNF_CHEMICAL_SUBSTANCE": METFORMIN_BNF},
-    }).encode()
-    req = urllib.request.Request(
-        NHSBSA_API,
-        data=body,
-        headers={"Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            d = json.load(r)
-        print(f"  status: {'OK' if d['success'] else 'FAIL'}, records: {len(d['result']['records'])}, total: {d['result']['total']:,}")
-    except Exception as exc:
-        print(f"  FAIL: {exc}")
-
-
-def test_csv_download() -> None:
-    """Download the PCA (Prescriptions Cost Analysis) CSV — smaller aggregated dataset."""
-    print("\n[Test 4] NHSBSA Prescriptions Cost Analysis CSV download (2024)...")
-    # PCA is aggregated annual data, much smaller than EPD
-    url = "https://www.nhsbsa.nhs.uk/sites/default/files/2024-09/pca-summary-tables-2023-24-v2.xlsx"
-    req = urllib.request.Request(url, headers={"User-Agent": "uk-healthcare-pipeline/1.0"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            size = len(r.read())
-        print(f"  OK — downloaded {size:,} bytes")
-    except Exception as exc:
-        print(f"  FAIL: {exc}")
-
-
-def test_fingertips_data() -> None:
-    """Fingertips OHID API — diabetes prevalence by ICB."""
-    print("\n[Test 5] Fingertips — diabetes indicator data by ICB...")
-    # Indicator 241 = Diabetes: QOF prevalence (all ages)
-    # Area type 221 = Sub-ICB
-    url = "https://fingertips.phe.org.uk/api/all_data/json/by_indicator_id?indicator_ids=241&area_type_id=221&parent_area_type_id=220"
-    try:
-        with urllib.request.urlopen(url, timeout=30) as r:
-            raw = r.read()
-        d = json.loads(raw)
-        print(f"  OK — {len(d):,} records")
-        if d:
-            sample = d[0]
-            print(f"  Sample: area={sample.get('AreaName','')}, year={sample.get('Year','')}, value={sample.get('Value','')}")
-    except Exception as exc:
-        print(f"  FAIL: {exc}")
-
-
-def test_fingertips_indicator_list() -> None:
-    """Fingertips — list indicators in the diabetes profile."""
-    print("\n[Test 6] Fingertips — diabetes profile indicator list...")
-    # Profile 71 = Diabetes
-    url = "https://fingertips.phe.org.uk/api/indicator_metadata/all/by_profile_id?profile_ids=71"
-    try:
-        with urllib.request.urlopen(url, timeout=20) as r:
-            d = json.load(r)
-        print(f"  OK — {len(d)} indicators in diabetes profile")
-        # Print first 5 indicator names
-        for k, v in list(d.items())[:5]:
-            name = v.get("Descriptive", {}).get("Name", "")
-            print(f"    {k}: {name}")
-    except Exception as exc:
-        print(f"  FAIL: {exc}")
-
-
-def get_latest_resource_id() -> str:
+def test_nhsbsa_package_show():
     url = "https://opendata.nhsbsa.net/api/3/action/package_show?id=english-prescribing-data-epd"
     with urllib.request.urlopen(url, timeout=20) as r:
         d = json.load(r)
-    epd = [res for res in d["result"]["resources"] if res["name"].startswith("EPD_2")]
-    latest = sorted(epd, key=lambda x: x["name"])[-1]
-    print(f"Latest EPD resource: {latest['name']}")
-    return latest["id"]
+    resources = [res["name"] for res in d["result"]["resources"] if res["name"].startswith("EPD_2")]
+    print(f"  OK — {len(resources)} monthly files, latest: {sorted(resources)[-1]}")
+
+
+# ---------------------------------------------------------------------------
+# Fingertips OHID tests
+# ---------------------------------------------------------------------------
+
+def test_fingertips_profiles():
+    url = "https://fingertips.phe.org.uk/api/profiles"
+    with urllib.request.urlopen(url, timeout=20) as r:
+        d = json.load(r)
+    print(f"  OK — {len(d)} profiles available")
+
+
+def test_fingertips_diabetes_indicators():
+    # Profile 71 = Diabetes
+    url = "https://fingertips.phe.org.uk/api/indicator_metadata/all/by_profile_id?profile_ids=71"
+    with urllib.request.urlopen(url, timeout=20) as r:
+        d = json.load(r)
+    print(f"  OK — {len(d)} indicators in diabetes profile")
+    for k, v in list(d.items())[:5]:
+        print(f"    {k}: {v.get('Descriptive', {}).get('Name', '')}")
+
+
+def test_fingertips_data_by_icb():
+    # Indicator 241 = Diabetes: QOF prevalence (all ages), area type 221 = Sub-ICB
+    url = ("https://fingertips.phe.org.uk/api/all_data/json/by_indicator_id"
+           "?indicator_ids=241&area_type_id=221&parent_area_type_id=220")
+    with urllib.request.urlopen(url, timeout=30) as r:
+        d = json.load(r)
+    print(f"  OK — {len(d):,} data points")
+    if d:
+        s = d[0]
+        print(f"  Sample: area={s.get('AreaName','')}, year={s.get('Year','')}, value={s.get('Value','')}, sex={s.get('Sex',{}).get('Name','')}")
+
+
+def test_fingertips_area_types():
+    url = "https://fingertips.phe.org.uk/api/area_types"
+    with urllib.request.urlopen(url, timeout=20) as r:
+        d = json.load(r)
+    icb_types = [a for a in d if "ICB" in a.get("Name", "") or "Sub ICB" in a.get("Name", "")]
+    print(f"  OK — {len(d)} area types, ICB-related: {[(a['Id'], a['Name']) for a in icb_types]}")
+
+
+def test_fingertips_multiple_indicators():
+    # Indicator 93015 = Hospital admissions for diabetes, 241 = Diabetes prevalence
+    # 91282 = Diabetes: patients with controlled HbA1c
+    url = ("https://fingertips.phe.org.uk/api/all_data/json/by_indicator_id"
+           "?indicator_ids=93015,91282&area_type_id=221")
+    with urllib.request.urlopen(url, timeout=30) as r:
+        d = json.load(r)
+    print(f"  OK — {len(d):,} data points across 2 indicators")
+    indicators = set(p.get("IndicatorName", "") for p in d[:100])
+    for name in indicators:
+        print(f"    - {name}")
 
 
 if __name__ == "__main__":
     print("=" * 60)
-    print("NHSBSA / Fingertips API — approach testing")
+    print("Data source connectivity tests")
     print("=" * 60)
 
-    resource_id = get_latest_resource_id()
-
-    test_unfiltered(resource_id)
-    test_filter_get(resource_id)
-    test_filter_post(resource_id)
-    test_csv_download()
-    test_fingertips_data()
-    test_fingertips_indicator_list()
+    run("[NHSBSA 1] package_show (resource listing)", test_nhsbsa_package_show)
+    run("[NHSBSA 2] datastore_search unfiltered", test_nhsbsa_unfiltered)
+    run("[Fingertips 1] profiles list", test_fingertips_profiles)
+    run("[Fingertips 2] diabetes profile indicators", test_fingertips_diabetes_indicators)
+    run("[Fingertips 3] area types (find ICB IDs)", test_fingertips_area_types)
+    run("[Fingertips 4] diabetes prevalence data by Sub-ICB", test_fingertips_data_by_icb)
+    run("[Fingertips 5] multiple indicators (admissions + HbA1c)", test_fingertips_multiple_indicators)
 
     print("\n" + "=" * 60)
-    print("Done — paste output back to decide which approach to use")
+    print("Paste full output back to decide which approach to use")
     print("=" * 60)
