@@ -1,9 +1,9 @@
 """
 pipeline/visualise.py — matplotlib chart functions.
 
-Called by notebook 06 to produce the final 2×2 clinical insight figure.
+Called by scripts/06_visualise.py to produce clinical insight figures.
 All functions accept a pre-created matplotlib Axes object so they can be
-composed into any subplot layout the notebook requires.
+composed into any subplot layout the caller requires.
 """
 
 from __future__ import annotations
@@ -179,8 +179,8 @@ def plot_monthly_trend(
 def figure_to_bytes(fig: plt.Figure, fmt: str = "pdf") -> bytes:
     """Export a matplotlib figure to an in-memory bytes buffer.
 
-    Used by the dashboard notebook to generate PDF and PNG downloads
-    without writing a temporary file to disk.
+    Used to generate PDF and PNG output bytes without writing a temporary
+    file to disk.
 
     Parameters
     ----------

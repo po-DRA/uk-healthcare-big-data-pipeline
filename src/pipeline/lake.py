@@ -49,7 +49,7 @@ def write_lake(payload: dict, base_dir: pathlib.Path) -> pathlib.Path:
     Parameters
     ----------
     payload:
-        Dict returned by ``fetch_openprescribing()`` or ``fetch_nhs_pages()``.
+        Dict returned by ``fetch_nhsbsa()`` or ``fetch_nhs_pages()``.
         Must contain ``"drug"`` and ``"type"`` keys.
     base_dir:
         Root of the data lake, e.g. ``pathlib.Path("lake")``.
@@ -112,7 +112,7 @@ def read_lake(
     drug:
         Drug name, e.g. ``"metformin"``.
     data_type:
-        Either ``"openprescribing"`` (reads JSONL) or ``"nhs_pages"``
+        Either ``"nhsbsa_epd"`` (reads JSONL) or ``"nhs_pages"``
         (reads JSON and returns the ``pages`` list).
     base_dir:
         Root of the data lake.
@@ -120,7 +120,7 @@ def read_lake(
     Returns
     -------
     list[dict]
-        For ``"openprescribing"``: one dict per prescribing record.
+        For ``"nhsbsa_epd"``: one dict per prescribing record.
         For ``"nhs_pages"``: one dict per extracted page section.
 
     Raises

@@ -18,7 +18,7 @@ from pipeline.lake import lake_summary, read_lake, write_lake
 
 PRESCRIBING_PAYLOAD = {
     "drug": "metformin",
-    "bnf_code": "0601023A0",
+    "bnf_code": "0601022B0",
     "type": "nhsbsa_epd",
     "total_rows": 2,
     "records": [
@@ -40,7 +40,7 @@ NHS_PAGES_PAYLOAD = {
 
 
 # ---------------------------------------------------------------------------
-# write_lake — openprescribing
+# write_lake — nhsbsa_epd
 # ---------------------------------------------------------------------------
 
 
@@ -143,7 +143,7 @@ def test_write_lake_unknown_type_raises(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# read_lake — openprescribing
+# read_lake — nhsbsa_epd
 # ---------------------------------------------------------------------------
 
 

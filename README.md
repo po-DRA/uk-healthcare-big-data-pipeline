@@ -546,7 +546,7 @@ uv run python scripts/01_fetch.py
 
 ## Running the Full Pipeline with Prefect
 
-After completing the notebooks, run the production-grade orchestration:
+After working through the scripts, run the production-grade orchestration:
 
 ```bash
 # Terminal 1 - start Prefect server and UI

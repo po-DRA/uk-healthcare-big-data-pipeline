@@ -119,7 +119,7 @@ def prescribing_event_stream(
     if not path.exists():
         raise FileNotFoundError(
             f"Bronze lake file not found: {path}. "
-            "Run the fetch pipeline first (notebook 01 or pipeline_flow.py)."
+            "Run the fetch pipeline first (scripts/01_fetch.py or pipeline_flow.py)."
         )
 
     batch: list[dict] = []
