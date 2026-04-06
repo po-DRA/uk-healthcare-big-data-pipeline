@@ -9,34 +9,27 @@ TRY_CAST would silently convert it to NULL.
 
 Two source contracts are defined:
 
-  OpenPrescribingPayload  — structured prescribing records from the API
-  NHSPagesPayload         — unstructured clinical sections scraped from NHS.uk
+  NHSBSAPayload    — structured prescribing records streamed from NHSBSA EPD CSV
+  NHSPagesPayload  — unstructured clinical sections scraped from NHS.uk
 
 Usage (in fetch.py)::
 
-    from pipeline.contracts import OpenPrescribingPayload
-    validated = OpenPrescribingPayload.model_validate(raw_payload)
+    from pipeline.contracts import NHSBSAPayload
+    validated = NHSBSAPayload.model_validate(raw_payload)
     return validated.model_dump()
 
 Raises ``pydantic.ValidationError`` (a subclass of ``ValueError``) if the
-payload does not satisfy the contract — e.g. a required field is missing, a
-numeric field cannot be coerced, or the ``type`` discriminator is wrong.
+payload does not satisfy the contract.
 
 Design notes
 ------------
-* ``model_config = ConfigDict(extra="ignore")`` — unknown API fields are
-  silently dropped rather than rejected.  This makes the contract tolerant of
-  additive API changes (new fields appear without breaking the pipeline).
+* ``model_config = ConfigDict(extra="ignore")`` — unknown fields are silently
+  dropped, making the contract tolerant of additive source changes.
 
 * Numeric fields use ``float | None`` and ``int | None``.  Pydantic v2 will
-  attempt coercion (``"100"`` → 100) before raising.  This mirrors the
-  intent of DuckDB's ``TRY_CAST`` in Silver, but catches hard failures
-  (``"xyz"`` for a numeric field) earlier.
+  attempt coercion before raising, mirroring DuckDB ``TRY_CAST`` in Silver.
 
-* ``SilverDQViolation`` is a custom exception raised by
-  ``validate_silver_quality()`` when null-rate thresholds are breached.  It
-  carries the full violation report so callers (Prefect tasks, notebooks) can
-  log structured details rather than just a string message.
+* ``SilverDQViolation`` is raised when null-rate thresholds are breached.
 """
 
 from __future__ import annotations
@@ -51,7 +44,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class PrescribingRecord(BaseModel):
-    """One row from the OpenPrescribing API, normalised by fetch.py."""
+    """One row from the NHSBSA EPD, normalised by fetch.py."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -62,17 +55,19 @@ class PrescribingRecord(BaseModel):
     row_id: str
     setting: str = ""
     ccg: str = ""
+    icb_name: str = ""
     drug: str
 
 
-class OpenPrescribingPayload(BaseModel):
-    """Contract for payloads returned by ``fetch_openprescribing()``."""
+class NHSBSAPayload(BaseModel):
+    """Contract for payloads returned by ``fetch_nhsbsa()``."""
 
     model_config = ConfigDict(extra="ignore")
 
     drug: str
     bnf_code: str
-    type: Literal["openprescribing"]
+    source: Literal["nhsbsa_epd"]
+    resource: str
     total_rows: int = Field(ge=0)
     records: list[PrescribingRecord]
 

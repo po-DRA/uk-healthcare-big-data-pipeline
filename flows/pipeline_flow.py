@@ -36,7 +36,7 @@ from prefect import flow, task
 from prefect.tasks import exponential_backoff
 
 from pipeline.contracts import DEFAULT_NULL_THRESHOLDS, SilverDQViolation
-from pipeline.fetch import DRUG_CODES, fetch_nhs_pages, fetch_openprescribing
+from pipeline.fetch import DRUG_CODES, fetch_nhsbsa, fetch_nhs_pages
 from pipeline.lake import write_lake
 from pipeline.lineage import dataset, lineage_job
 from pipeline.medallion import build_dim_practice, build_gold, build_silver
@@ -60,16 +60,16 @@ DB_PATH = pathlib.Path("pipeline.duckdb")
 
 
 @task(
-    name="Fetch OpenPrescribing",
+    name="Fetch NHSBSA EPD",
     retries=2,
     retry_delay_seconds=exponential_backoff(backoff_factor=2),
     log_prints=True,
 )
 def fetch_prescribing_task(bnf_code: str, drug_name: str) -> dict:
-    """Fetch structured prescribing records from the OpenPrescribing API.
+    """Fetch structured prescribing records by streaming the NHSBSA EPD CSV.
 
-    Demonstrates **Velocity** — retries with exponential back-off handle
-    transient API timeouts gracefully.
+    Demonstrates **Velocity** — streams the latest monthly file and stops
+    early once enough rows per drug are collected (~50MB, ~10s).
 
     Parameters
     ----------
@@ -81,9 +81,9 @@ def fetch_prescribing_task(bnf_code: str, drug_name: str) -> dict:
     Returns
     -------
     dict
-        Prescribing payload as returned by ``fetch_openprescribing()``.
+        Prescribing payload as returned by ``fetch_nhsbsa()``.
     """
-    return fetch_openprescribing(bnf_code, drug_name)
+    return fetch_nhsbsa(bnf_code, drug_name)
 
 
 @task(

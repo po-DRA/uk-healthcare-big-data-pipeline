@@ -69,7 +69,7 @@ def write_lake(payload: dict, base_dir: pathlib.Path) -> pathlib.Path:
     drug_dir = base_dir / drug
     drug_dir.mkdir(parents=True, exist_ok=True)
 
-    if data_type == "openprescribing":
+    if data_type in ("nhsbsa_epd", "openprescribing"):
         out_path = drug_dir / "prescribing.jsonl"
         tmp_path = out_path.with_suffix(".jsonl.tmp")
         try:
@@ -132,7 +132,7 @@ def read_lake(
     """
     drug_dir = base_dir / drug
 
-    if data_type == "openprescribing":
+    if data_type in ("nhsbsa_epd", "openprescribing"):
         path = drug_dir / "prescribing.jsonl"
         with path.open("r", encoding="utf-8") as fh:
             return [json.loads(line) for line in fh if line.strip()]

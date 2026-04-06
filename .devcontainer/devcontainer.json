@@ -2,12 +2,8 @@
   "name": "UK Healthcare Big Data Pipeline",
   "image": "mcr.microsoft.com/devcontainers/python:3.11",
   "postCreateCommand": "curl -LsSf https://astral.sh/uv/install.sh | sh && source $HOME/.local/bin/env && uv sync --all-groups && uv run pre-commit install",
-  "forwardPorts": [2718, 4200, 8585],
+  "forwardPorts": [4200, 8585],
   "portsAttributes": {
-    "2718": {
-      "label": "Marimo notebooks",
-      "onAutoForward": "openBrowser"
-    },
     "4200": {
       "label": "Prefect UI",
       "onAutoForward": "notify"
@@ -22,7 +18,6 @@
       "extensions": [
         "ms-python.python",
         "ms-python.vscode-pylance",
-        "ms-toolsai.jupyter",
         "eamodio.gitlens",
         "charliermarsh.ruff",
         "tamasfe.even-better-toml"

@@ -6,37 +6,42 @@ All HTTP calls are mocked so these tests run offline and fast.
 
 from __future__ import annotations
 
+import io
 import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pipeline.fetch import fetch_nhs_pages, fetch_openprescribing
+from pipeline.fetch import fetch_nhsbsa, fetch_nhs_pages
 
 # ---------------------------------------------------------------------------
-# Canned fixtures
+# Canned fixtures — NHSBSA EPD CSV format
 # ---------------------------------------------------------------------------
 
-CANNED_PRESCRIBING = [
-    {
-        "date": "2024-01-01",
-        "actual_cost": 1234.56,
-        "items": 100,
-        "quantity": 5000.0,
-        "row_id": "A81001-2024-01-01",
-        "setting": 4,
-        "pct_id": "03V",
-    },
-    {
-        "date": "2024-02-01",
-        "actual_cost": 987.65,
-        "items": 80,
-        "quantity": 4000.0,
-        "row_id": "A81001-2024-02-01",
-        "setting": 4,
-        "pct_id": "03V",
-    },
-]
+# Minimal CSV content matching the real EPD schema
+CANNED_CSV_HEADER = (
+    "YEAR_MONTH,REGIONAL_OFFICE_NAME,REGIONAL_OFFICE_CODE,ICB_NAME,ICB_CODE,"
+    "PCO_NAME,PCO_CODE,PRACTICE_NAME,PRACTICE_CODE,ADDRESS_1,ADDRESS_2,"
+    "ADDRESS_3,ADDRESS_4,POSTCODE,BNF_CHEMICAL_SUBSTANCE,CHEMICAL_SUBSTANCE_BNF_DESCR,"
+    "BNF_CODE,BNF_DESCRIPTION,BNF_CHAPTER_PLUS_CODE,QUANTITY,ITEMS,TOTAL_QUANTITY,"
+    "ADQUSAGE,NIC,ACTUAL_COST,UNIDENTIFIED\n"
+)
+
+CANNED_CSV_ROW = (
+    '202506,"NORTH EAST","Y63","NHS NORTH EAST ICB","QHM","NHS NORTH EAST","QHM",'
+    '"TEST PRACTICE","A81001","1 HIGH STREET","","","","NE1 1AA",'
+    '"0601022B0","Metformin hydrochloride",'
+    '"0601022B0AAAAAA","Metformin 500mg tablets","06: Endocrine System",'
+    "60.0,5,60.0,0.0,2.5,2.09144,false\n"
+)
+
+CANNED_PACKAGE = {
+    "result": {
+        "resources": [
+            {"name": "EPD_202506", "url": "https://opendata.nhsbsa.net/fake/EPD_202506.csv"},
+        ]
+    }
+}
 
 CANNED_NHS_HTML = """
 <html><body><main>
@@ -52,70 +57,96 @@ CANNED_NHS_HTML = """
 """
 
 
+def _make_csv_urlopen(rows: int = 3):
+    """Return a mock for urllib.request.urlopen that serves CSV data."""
+    csv_content = CANNED_CSV_HEADER + (CANNED_CSV_ROW * rows)
+
+    def fake_urlopen(req_or_url, timeout=None):
+        url = req_or_url if isinstance(req_or_url, str) else req_or_url.full_url
+        if "package_show" in url:
+            mock = MagicMock()
+            mock.__enter__ = lambda s: s
+            mock.__exit__ = MagicMock(return_value=False)
+            mock.read.return_value = json.dumps(CANNED_PACKAGE).encode()
+            return mock
+        else:
+            mock = MagicMock()
+            mock.__enter__ = lambda s: s
+            mock.__exit__ = MagicMock(return_value=False)
+            data = csv_content.encode("utf-8")
+            mock.read.side_effect = [data, b""]
+            return mock
+
+    return fake_urlopen
+
+
 # ---------------------------------------------------------------------------
-# fetch_openprescribing tests
+# fetch_nhsbsa tests
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_openprescribing_returns_correct_keys():
+def test_fetch_nhsbsa_returns_correct_keys():
     """Return dict must contain all required top-level keys."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = CANNED_PRESCRIBING
+    with patch("pipeline.fetch.urllib.request.urlopen", side_effect=_make_csv_urlopen(3)):
+        result = fetch_nhsbsa("0601022B0", "metformin")
 
-    with patch("pipeline.fetch.httpx.get", return_value=mock_response):
-        result = fetch_openprescribing("0601023A0", "metformin")
-
-    assert set(result.keys()) == {"drug", "bnf_code", "type", "total_rows", "records"}
+    assert set(result.keys()) == {"drug", "bnf_code", "source", "resource", "total_rows", "records"}
 
 
-def test_fetch_openprescribing_type_value():
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = CANNED_PRESCRIBING
+def test_fetch_nhsbsa_source_value():
+    with patch("pipeline.fetch.urllib.request.urlopen", side_effect=_make_csv_urlopen(3)):
+        result = fetch_nhsbsa("0601022B0", "metformin")
 
-    with patch("pipeline.fetch.httpx.get", return_value=mock_response):
-        result = fetch_openprescribing("0601023A0", "metformin")
-
-    assert result["type"] == "openprescribing"
+    assert result["source"] == "nhsbsa_epd"
 
 
-def test_fetch_openprescribing_total_rows_is_int():
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = CANNED_PRESCRIBING
-
-    with patch("pipeline.fetch.httpx.get", return_value=mock_response):
-        result = fetch_openprescribing("0601023A0", "metformin")
+def test_fetch_nhsbsa_total_rows_is_int():
+    with patch("pipeline.fetch.urllib.request.urlopen", side_effect=_make_csv_urlopen(3)):
+        result = fetch_nhsbsa("0601022B0", "metformin")
 
     assert isinstance(result["total_rows"], int)
-    assert result["total_rows"] == 2
 
 
-def test_fetch_openprescribing_record_keys():
+def test_fetch_nhsbsa_record_keys():
     """Each record must contain the required fields."""
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = CANNED_PRESCRIBING
-
-    with patch("pipeline.fetch.httpx.get", return_value=mock_response):
-        result = fetch_openprescribing("0601023A0", "metformin")
+    with patch("pipeline.fetch.urllib.request.urlopen", side_effect=_make_csv_urlopen(3)):
+        result = fetch_nhsbsa("0601022B0", "metformin")
 
     required = {"date", "actual_cost", "items", "quantity", "row_id", "setting", "ccg", "drug"}
     for record in result["records"]:
         assert required.issubset(set(record.keys()))
 
 
-def test_fetch_openprescribing_drug_name_propagated():
-    mock_response = MagicMock()
-    mock_response.status_code = 200
-    mock_response.json.return_value = CANNED_PRESCRIBING
+def test_fetch_nhsbsa_drug_name_propagated():
+    with patch("pipeline.fetch.urllib.request.urlopen", side_effect=_make_csv_urlopen(3)):
+        result = fetch_nhsbsa("0601022B0", "metformin")
 
-    with patch("pipeline.fetch.httpx.get", return_value=mock_response):
-        result = fetch_openprescribing("0212000B0", "atorvastatin")
+    assert result["drug"] == "metformin"
+    for rec in result["records"]:
+        assert rec["drug"] == "metformin"
 
-    assert result["drug"] == "atorvastatin"
-    assert all(r["drug"] == "atorvastatin" for r in result["records"])
+
+def test_fetch_nhsbsa_filters_unidentified_rows():
+    """Rows with UNIDENTIFIED=true must be excluded."""
+    unidentified_row = CANNED_CSV_ROW.replace(",false\n", ",true\n")
+    csv_content = CANNED_CSV_HEADER + unidentified_row
+
+    def fake_urlopen(req_or_url, timeout=None):
+        url = req_or_url if isinstance(req_or_url, str) else req_or_url.full_url
+        mock = MagicMock()
+        mock.__enter__ = lambda s: s
+        mock.__exit__ = MagicMock(return_value=False)
+        if "package_show" in url:
+            mock.read.return_value = json.dumps(CANNED_PACKAGE).encode()
+        else:
+            mock.read.side_effect = [csv_content.encode(), b""]
+        return mock
+
+    with patch("pipeline.fetch.urllib.request.urlopen", side_effect=fake_urlopen):
+        result = fetch_nhsbsa("0601022B0", "metformin")
+
+    assert result["total_rows"] == 0
+    assert result["records"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -128,7 +159,7 @@ def _make_nhs_mock(html: str, status_code: int = 200) -> MagicMock:
     mock.status_code = status_code
     mock.text = html
     if status_code != 200:
-        from httpx import HTTPStatusError, Request, Response
+        from httpx import HTTPStatusError
         mock.raise_for_status.side_effect = HTTPStatusError(
             "error", request=MagicMock(), response=MagicMock(status_code=status_code)
         )
@@ -187,19 +218,18 @@ def test_fetch_nhs_pages_404_skipped(caplog):
         with caplog.at_level(logging.WARNING, logger="pipeline.fetch"):
             result = fetch_nhs_pages("metformin")
 
-    # Should not raise; pages may be empty if all 3 return 404
     assert isinstance(result["pages"], list)
     assert any("404" in record.message for record in caplog.records)
 
 
 def test_fetch_nhs_pages_invalid_drug_name_raises():
-    """drug_name containing digits or spaces must raise ValueError (line 166)."""
+    """drug_name containing digits or spaces must raise ValueError."""
     with pytest.raises(ValueError, match="Invalid drug_name"):
         fetch_nhs_pages("metformin2")
 
 
 def test_fetch_nhs_pages_http_status_error_skipped(caplog):
-    """Non-404 HTTPStatusError must be caught and page skipped (lines 192-194)."""
+    """Non-404 HTTPStatusError must be caught and page skipped."""
     import logging
 
     from httpx import HTTPStatusError
@@ -219,7 +249,7 @@ def test_fetch_nhs_pages_http_status_error_skipped(caplog):
 
 
 def test_fetch_nhs_pages_request_error_skipped(caplog):
-    """Network-level RequestError must be caught and page skipped (lines 195-197)."""
+    """Network-level RequestError must be caught and page skipped."""
     import logging
 
     from httpx import RequestError
@@ -236,7 +266,7 @@ def test_fetch_nhs_pages_request_error_skipped(caplog):
 
 
 def test_fetch_nhs_pages_no_headings_fallback():
-    """HTML with no h2/h3 headings uses the paragraph fallback (lines 206-208)."""
+    """HTML with no h2/h3 headings uses the paragraph fallback."""
     html_no_headings = """
     <html><body><main>
       <p>This is some text without any headings.</p>
@@ -247,5 +277,4 @@ def test_fetch_nhs_pages_no_headings_fallback():
         result = fetch_nhs_pages("metformin")
 
     assert len(result["pages"]) > 0
-    # Fallback sets heading to empty string
     assert any(p["heading"] == "" for p in result["pages"])

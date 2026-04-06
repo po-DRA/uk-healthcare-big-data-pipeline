@@ -6,23 +6,23 @@ Run manually to verify end-to-end pipeline connectivity:
 
     uv run pytest tests/test_pipeline.py -v -m slow
 
-They require internet access and will hit the real OpenPrescribing API.
+They require internet access and will stream from the real NHSBSA EPD API.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from pipeline.fetch import DRUG_CODES, fetch_openprescribing
+from pipeline.fetch import DRUG_CODES, fetch_nhsbsa
 
 
 @pytest.mark.slow
-def test_live_fetch_openprescribing_metformin():
+def test_live_fetch_nhsbsa_metformin():
     """Live call: metformin records must be non-empty with expected keys."""
-    result = fetch_openprescribing(DRUG_CODES["metformin"], "metformin")
+    result = fetch_nhsbsa(DRUG_CODES["metformin"], "metformin")
 
     assert result["drug"] == "metformin"
-    assert result["type"] == "openprescribing"
+    assert result["source"] == "nhsbsa_epd"
     assert isinstance(result["total_rows"], int)
     assert result["total_rows"] > 0, "Expected at least one prescribing record"
 
@@ -34,16 +34,16 @@ def test_live_fetch_openprescribing_metformin():
 
 
 @pytest.mark.slow
-def test_live_fetch_openprescribing_atorvastatin():
+def test_live_fetch_nhsbsa_atorvastatin():
     """Live call: atorvastatin records must be non-empty."""
-    result = fetch_openprescribing(DRUG_CODES["atorvastatin"], "atorvastatin")
+    result = fetch_nhsbsa(DRUG_CODES["atorvastatin"], "atorvastatin")
     assert result["total_rows"] > 0
 
 
 @pytest.mark.slow
-def test_live_fetch_openprescribing_returns_date_strings():
+def test_live_fetch_nhsbsa_returns_date_strings():
     """Dates in live data should look like YYYY-MM-DD."""
-    result = fetch_openprescribing(DRUG_CODES["metformin"], "metformin")
+    result = fetch_nhsbsa(DRUG_CODES["metformin"], "metformin")
     for record in result["records"][:10]:
         date = record.get("date", "")
         assert len(date) == 10, f"Expected YYYY-MM-DD, got {date!r}"

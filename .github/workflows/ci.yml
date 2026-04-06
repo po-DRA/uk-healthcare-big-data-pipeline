@@ -8,7 +8,7 @@ on:
 
 jobs:
   ci:
-    name: Lint, type-check, test, and validate notebooks
+    name: Lint, type-check, and test
     runs-on: ubuntu-latest
 
     steps:
@@ -37,18 +37,6 @@ jobs:
 
       - name: Type-check with mypy
         run: uv run mypy src/
-
-      # ---------------------------------------------------------------
-      # Notebook validation
-      # Marimo notebooks are pure Python.
-      # py_compile catches broken syntax; ruff catches style issues.
-      # ---------------------------------------------------------------
-
-      - name: Validate notebook syntax
-        run: uv run python -m py_compile notebooks/*.py
-
-      - name: Lint notebooks with ruff
-        run: uv run ruff check notebooks/
 
       # ---------------------------------------------------------------
       # Tests with coverage

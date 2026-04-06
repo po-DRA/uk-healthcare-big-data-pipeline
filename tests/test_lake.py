@@ -19,7 +19,7 @@ from pipeline.lake import lake_summary, read_lake, write_lake
 PRESCRIBING_PAYLOAD = {
     "drug": "metformin",
     "bnf_code": "0601023A0",
-    "type": "openprescribing",
+    "type": "nhsbsa_epd",
     "total_rows": 2,
     "records": [
         {"date": "2024-01-01", "actual_cost": 100.0, "items": 10, "quantity": 500.0,
@@ -78,7 +78,7 @@ def test_write_lake_prescribing_exception_cleans_tmp(tmp_path):
     """If writing raises mid-write, the .tmp file must be removed."""
     bad_payload = {
         "drug": "metformin",
-        "type": "openprescribing",
+        "type": "nhsbsa_epd",
         # sets are not JSON-serialisable — triggers TypeError inside the with block
         "records": [{"date": "2024-01-01", "bad_value": {1, 2, 3}}],
     }
@@ -149,7 +149,7 @@ def test_write_lake_unknown_type_raises(tmp_path):
 
 def test_read_lake_prescribing_round_trips(tmp_path):
     write_lake(PRESCRIBING_PAYLOAD, tmp_path)
-    records = read_lake("metformin", "openprescribing", tmp_path)
+    records = read_lake("metformin", "nhsbsa_epd", tmp_path)
     assert len(records) == 2
     assert records[0]["date"] == "2024-01-01"
     assert records[1]["date"] == "2024-02-01"
@@ -157,7 +157,7 @@ def test_read_lake_prescribing_round_trips(tmp_path):
 
 def test_read_lake_prescribing_file_not_found(tmp_path):
     with pytest.raises(FileNotFoundError):
-        read_lake("nonexistent", "openprescribing", tmp_path)
+        read_lake("nonexistent", "nhsbsa_epd", tmp_path)
 
 
 # ---------------------------------------------------------------------------

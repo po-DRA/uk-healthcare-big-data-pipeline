@@ -16,9 +16,9 @@ You will build a complete pipeline that fetches NHS prescribing records and clin
 
 1. Fork this repo → click **Code → Codespaces → Create codespace on master**
 2. Wait ~2 minutes for setup to complete
-3. In the terminal: `uv run pytest` — you should see `193 passed`
-4. Open the first notebook: `uv run marimo edit notebooks/00_introduction.py`
-5. Follow the **[Lab Guide (LABS.md)](LABS.md)** — 11 labs in order, ~4-5 hours total
+3. In the terminal: `uv run pytest` — all tests should pass
+4. Run the first script: `uv run python scripts/01_fetch.py`
+5. Follow the **[Lab Guide (LABS.md)](LABS.md)** — 8 labs in order, ~4-5 hours total
 
 **Local setup:** `git clone` → `uv sync --all-groups` → `uv run pytest`
 
@@ -27,20 +27,20 @@ You will build a complete pipeline that fetches NHS prescribing records and clin
 ## Contents
 
 1. [Quick Start](#quick-start)
-2. [Lab Guide](LABS.md) - step-by-step labs 00-10
+2. [Lab Guide](LABS.md) - step-by-step labs 01-08
 3. [Who This Is For](#who-this-is-for)
 4. [What You Will Learn](#what-you-will-learn)
-3. [Data Sources](#data-sources)
-4. [Architecture](#architecture)
-5. [Key Concepts Explained](#key-concepts-explained)
-6. [Setup](#setup)
-7. [Running the Notebooks](#running-the-notebooks)
-8. [Running the Full Pipeline with Prefect](#running-the-full-pipeline-with-prefect)
-9. [Project Structure](#project-structure)
-10. [Running the Tests](#running-the-tests)
-11. [GitHub Codespaces](#github-codespaces)
-12. [Further Reading](#further-reading)
-13. [Licence & Citation](#licence--citation)
+5. [Data Sources](#data-sources)
+6. [Architecture](#architecture)
+7. [Key Concepts Explained](#key-concepts-explained)
+8. [Setup](#setup)
+9. [Running the Scripts](#running-the-scripts)
+10. [Running the Full Pipeline with Prefect](#running-the-full-pipeline-with-prefect)
+11. [Project Structure](#project-structure)
+12. [Running the Tests](#running-the-tests)
+13. [GitHub Codespaces](#github-codespaces)
+14. [Further Reading](#further-reading)
+15. [Licence & Citation](#licence--citation)
 
 ---
 
@@ -54,34 +54,22 @@ You will build a complete pipeline that fetches NHS prescribing records and clin
 
 ## What You Will Learn
 
-This course uses **Marimo notebooks** for interactive exploration and a **modular Python pipeline** for production-grade patterns — deliberately combining both.
+This course uses **numbered Python scripts** that you run from the terminal — the same workflow used by practising data engineers. Each script is self-contained, clearly commented, and builds on the files the previous script wrote.
 
-That reflects a real and ongoing debate in the field. Notebooks are not inherently unproductive: tools like Marimo, Papermill, and Ploomber can run notebooks as pipeline steps, and organisations like Netflix and Databricks have done exactly that at scale. Data scientists and academics often prefer notebooks for the narrative, interactivity, and reproducibility they offer. Data engineers and MLOps practitioners tend to reach for modular code when they need testability, CI/CD, and audit trails.
-
-The right choice depends on what you need right now:
-
-| You need... | Reach for... |
-|-------------|-------------|
-| Explore data, share findings, iterate fast | A notebook (Jupyter, Marimo) |
-| Run a notebook on a schedule with parameters | Papermill or Prefect + Marimo |
-| Test individual functions, enforce contracts, track lineage | Modular code + orchestrator (this pipeline) |
-
-This course teaches the patterns in the third row - not because notebooks are wrong, but because knowing when and how to move beyond them is a skill of its own.
-
-| Concept | Why it matters | What you build | Notebook |
-|---------|---------------|----------------|----------|
+| Concept | Why it matters | What you build | Script |
+|---------|---------------|----------------|--------|
 | **The 4 V's of big data** | Healthcare data is simultaneously huge, fast-changing, structurally inconsistent, and untrustworthy - you need a mental model before you can design solutions | See Volume, Velocity, Variety, Veracity in live NHS data | 01-06 |
 | **Parallel data fetching** | Sequential fetching of 8 endpoints takes 4x longer; real pipelines cannot afford to wait | `ThreadPoolExecutor` cuts fetch time several-fold | 01 |
-| **Bronze data lake** | If your transform logic is wrong you need to re-derive from raw, not re-fetch from the API | Raw JSONL + JSON files, write-once, never modified | 02 |
-| **DuckDB SQL analytics** | Pandas loads everything into RAM; DuckDB queries files directly - the difference matters when data exceeds memory | Query raw lake files with SQL - no database server | 03 |
-| **Polars lazy evaluation** | Pandas processes eagerly; lazy evaluation lets the engine optimise before touching data | Transform millions of records without loading into RAM | 04 |
+| **Bronze data lake** | If your transform logic is wrong you need to re-derive from raw, not re-fetch from the API | Raw JSONL + JSON files, write-once, never modified | 01-02 |
+| **DuckDB SQL analytics** | Pandas loads everything into RAM; DuckDB queries files directly - the difference matters when data exceeds memory | Query raw lake files with SQL - no database server | 02 |
+| **Polars lazy evaluation** | Pandas processes eagerly; lazy evaluation lets the engine optimise before touching data | Transform millions of records without loading into RAM | 03 |
 | **NLP on clinical text** | 80% of healthcare data is unstructured text - ignoring it means ignoring most of the signal | Term-frequency analysis on NHS.uk patient pages | 05 |
-| **Medallion architecture** | Without layers, a bug in Silver corrupts Gold silently; layers make it fixable without re-fetching | Bronze -> Silver (DuckDB) -> Gold (DuckDB) | 07 |
-| **SCD Type 2** | NHS reorganised 106 CCGs into 42 ICBs in 2022 - without versioned dimensions, historical reports silently mis-attribute spend | Track GP practice attribute changes over time | 07 |
-| **Streaming simulation** | Batch pipelines are blind to what is happening right now; knowing when to stream vs batch is a core engineering decision | Micro-batch ingestion via Python generators + DuckDB | 08 |
+| **Medallion architecture** | Without layers, a bug in Silver corrupts Gold silently; layers make it fixable without re-fetching | Bronze -> Silver (DuckDB) -> Gold (DuckDB) | 04 |
+| **SCD Type 2** | NHS reorganised 106 CCGs into 42 ICBs in 2022 - without versioned dimensions, historical reports silently mis-attribute spend | Track GP practice attribute changes over time | 04 |
+| **Streaming simulation** | Batch pipelines are blind to what is happening right now; knowing when to stream vs batch is a core engineering decision | Micro-batch ingestion via Python generators + DuckDB | 07 |
 | **Data contracts** | Without contracts, a malformed API response becomes a silent NULL in Silver; contracts fail fast at the boundary | Pydantic models enforce schema at the API boundary; DQ gate halts the pipeline on null-rate breaches | Flow |
 | **Lineage tracking** | When Gold figures change unexpectedly, lineage tells you which upstream change caused it | OpenLineage-format events emitted from Prefect tasks; log-only mode needs no backend | Flow |
-| **Backfill** | When you fix a bug or add a new drug, you need to re-process history safely without touching unaffected data | Partition-level re-processing of Silver/Gold for a date range; idempotency proof | 10 |
+| **Backfill** | When you fix a bug or add a new drug, you need to re-process history safely without touching unaffected data | Partition-level re-processing of Silver/Gold for a date range; idempotency proof | 08 |
 | **Prefect orchestration** | Cron jobs have no retry logic, no UI, and no partial failure handling - orchestrators solve all three | `@flow` / `@task` with retries, logging, visual DAG | Flow |
 | **Modern Python tooling** | Catching bugs before they reach production is cheaper than fixing them after | `uv`, `ruff`, `mypy`, `pre-commit`, GitHub Actions CI | Repo |
 
@@ -91,19 +79,19 @@ This course teaches the patterns in the third row - not because notebooks are wr
 
 | Source | URL | Format | Licence |
 |--------|-----|--------|---------|
-| OpenPrescribing API | https://openprescribing.net/api/ | JSON (REST API) | Open Government Licence v3.0 |
+| NHSBSA English Prescribing Dataset (EPD) | https://opendata.nhsbsa.net/ | CSV (6.9 GB/month, streamed) | Open Government Licence v3.0 |
 | NHS.uk Medicines Pages | https://www.nhs.uk/medicines/ | HTML (scraped) | Open Government Licence v3.0 |
 
-No API keys required for either source.
+No API keys required for either source. The NHSBSA CSV is streamed with early-exit filtering — only ~46 MB is read to collect 500 rows per drug.
 
 ### The Four Drugs Used Throughout
 
 | Drug | BNF Code | Indication |
 |------|----------|-----------|
-| Metformin | 0601023A0 | Type 2 diabetes (most prescribed drug in England) |
+| Metformin | 0601022B0 | Type 2 diabetes (most prescribed drug in England) |
 | Atorvastatin | 0212000B0 | High cholesterol |
-| Lisinopril | 0205051R0 | Hypertension / Heart failure |
-| Amlodipine | 0206020A0 | Hypertension / Angina |
+| Lisinopril | 0205051L0 | Hypertension / Heart failure |
+| Salbutamol | 0301011R0 | Asthma / COPD |
 
 ---
 
@@ -114,7 +102,7 @@ No API keys required for either source.
 ```mermaid
 flowchart TD
     subgraph sources["Data Sources"]
-        A["OpenPrescribing API\nstructured JSON"]
+        A["NHSBSA EPD CSV\nstructured (streamed)"]
         B["NHS.uk Pages\nunstructured HTML"]
     end
 
@@ -137,14 +125,13 @@ flowchart TD
     end
 
     subgraph streaming["⚡ Streaming Layer · pipeline.duckdb"]
-        K["streaming.live_prescribing\nmicro-batch via generator\n(notebook 08)"]
+        K["streaming.live_prescribing\nmicro-batch via generator\n(script 07)"]
     end
 
-    L["nlp_terms.jsonl\nNLP extraction\n(notebook 05)"]
-    M["outputs/clinical_insight.png\n(notebook 06)"]
-    N["Interactive Dashboard\nPDF/PNG export\n(notebook 09)"]
+    L["nlp_terms.jsonl\nNLP extraction\n(script 05)"]
+    M["outputs/clinical_insight.png\n(script 06)"]
     O["OpenLineage Events\nbuild_silver · build_gold\n(log or OpenMetadata backend)"]
-    P["Backfill\nbuild_silver_for_range()\n(notebook 10)"]
+    P["Backfill\nbuild_silver_for_range()\n(script 08)"]
 
     A --> C
     B --> C
@@ -159,9 +146,7 @@ flowchart TD
     F --> J
     F --> O
     G --> M
-    G --> N
     G --> O
-    H --> N
     L --> M
     D --> P
     P --> F
@@ -173,7 +158,7 @@ flowchart TD
 sequenceDiagram
     actor Dev as Developer
     participant PF as Prefect Flow
-    participant API as OpenPrescribing API
+    participant API as NHSBSA EPD API
     participant NHS as NHS.uk Pages
     participant Bronze as Bronze Lake
     participant DB as DuckDB
@@ -181,7 +166,7 @@ sequenceDiagram
     Dev->>PF: uv run python flows/pipeline_flow.py
 
     par Parallel fetch - 8 tasks
-        PF->>API: fetch_openprescribing() ×4 drugs
+        PF->>API: fetch_nhsbsa() ×4 drugs
     and
         PF->>NHS: fetch_nhs_pages() ×4 drugs
     end
@@ -328,11 +313,11 @@ This pipeline ingests from two sources in three formats - all in the same pipeli
 
 | Source | Format | Content |
 |--------|--------|---------|
-| OpenPrescribing API | JSONL (newline-delimited JSON) | Structured prescribing records |
+| NHSBSA EPD (streamed CSV) | JSONL (converted on write) | Structured prescribing records |
 | NHS.uk Medicines Pages | JSON (document) | Semi-structured section headings + prose |
 | NHS.uk raw HTML | HTML | Fully unstructured clinical text |
 
-All three are joined with a single DuckDB SQL query in notebook 06.
+All three are joined with a single DuckDB SQL query in script 06.
 
 **Real-world implication:** An NHS hospital data warehouse typically joins HL7 FHIR records (JSON), discharge summaries (PDF/text), waiting list exports (CSV), and live IoT sensor streams (binary). The variety challenge is not just technical (parsing) but analytical: how do you trust data from sources with fundamentally different quality guarantees?
 
@@ -536,30 +521,26 @@ uv run pre-commit install
 
 ---
 
-## Running the Notebooks
+## Running the Scripts
 
-Run notebooks in order 00 → 10. Each builds on the outputs of the previous one.
+Run scripts in order 01 → 08. Each builds on the outputs of the previous one.
 
 ```bash
-# Open a specific notebook (browser opens at http://localhost:2718)
-uv run marimo edit notebooks/00_introduction.py
+uv run python scripts/01_fetch.py
 ```
 
-| Notebook | Topic | Key V's |
-|----------|-------|---------|
-| `00` | Introduction - why pipelines, the 4 V's, data sources | All (conceptual) |
-| `01` | Parallel fetch - ThreadPoolExecutor timing | Volume, Velocity |
-| `02` | Bronze data lake - JSONL + JSON side-by-side | Variety |
-| `03` | DuckDB SQL - query raw lake files | Volume |
-| `04` | Polars lazy transform + veracity report | Volume, Veracity |
-| `05` | NLP on NHS clinical text | Variety |
-| `06` | DuckDB JOIN + matplotlib clinical insight chart | All four |
-| `07` | Medallion architecture + SCD Type 2 | Veracity, Volume |
-| `08` | Streaming simulation via generators + DuckDB | Velocity |
-| `09` | Interactive dashboard, reactive filters, PDF/PNG export | All four |
-| `10` | Backfill - partition-level re-processing of Bronze → Silver → Gold for a date range | Veracity |
+| Script | Topic | Key V's |
+|--------|-------|---------|
+| [01_fetch.py](scripts/01_fetch.py) | Parallel fetch from NHSBSA EPD + NHS.uk | Volume, Velocity |
+| [02_query_bronze.py](scripts/02_query_bronze.py) | DuckDB SQL on raw JSONL lake files | Volume, Variety |
+| [03_transform.py](scripts/03_transform.py) | Polars lazy transform + veracity report | Volume, Veracity |
+| [04_medallion.py](scripts/04_medallion.py) | Bronze → Silver → Gold + SCD Type 2 | Veracity, Volume |
+| [05_nlp.py](scripts/05_nlp.py) | NLP term extraction from NHS clinical text | Variety |
+| [06_visualise.py](scripts/06_visualise.py) | Charts from Gold tables saved to outputs/ | All four |
+| [07_stream.py](scripts/07_stream.py) | Micro-batch streaming simulation via generator + DuckDB | Velocity |
+| [08_backfill.py](scripts/08_backfill.py) | Partition-level backfill + idempotency proof | Veracity |
 
-> Run notebooks 01–02 before 03–10 (they populate `lake/` which later notebooks read).
+> Run script 01 before all others — it populates `lake/` which later scripts read.
 
 ---
 
@@ -578,7 +559,7 @@ uv run python flows/pipeline_flow.py
 Open **http://localhost:4200** to watch the pipeline run in real time, see task retries, and inspect structured logs.
 
 The Prefect flow runs all steps in order:
-1. Parallel fetch (8 tasks - 4 drugs × 2 sources) - payloads validated against Pydantic contracts
+1. Parallel fetch (8 tasks - 4 drugs × 2 sources: NHSBSA EPD + NHS.uk) - payloads validated against Pydantic contracts
 2. Write to Bronze lake
 3. Polars transformation + veracity report
 4. Build Silver layer (`silver.prescribing`) - lineage event emitted
@@ -610,7 +591,7 @@ OPENLINEAGE_URL=http://localhost:8585 uv run python flows/pipeline_flow.py
 ```
 uk-healthcare-big-data-pipeline/
 ├── .devcontainer/
-│   └── devcontainer.json          # GitHub Codespaces: Python 3.11, ports 2718 + 4200
+│   └── devcontainer.json          # GitHub Codespaces: Python 3.11, port 4200
 ├── .github/
 │   └── workflows/
 │       └── ci.yml                 # GitHub Actions: ruff + mypy + pytest -m "not slow"
@@ -618,7 +599,7 @@ uk-healthcare-big-data-pipeline/
 ├── pyproject.toml                 # uv project, all deps, ruff/mypy/pytest config
 ├── src/
 │   └── pipeline/
-│       ├── fetch.py               # HTTP acquisition - httpx + BeautifulSoup + Pydantic validation
+│       ├── fetch.py               # NHSBSA EPD streaming + NHS.uk scraping
 │       ├── lake.py                # Bronze layer read/write (JSONL + JSON)
 │       ├── medallion.py           # Silver + Gold + SCD Type 2 + backfill (DuckDB)
 │       ├── contracts.py           # Pydantic data contracts + SilverDQViolation
@@ -629,20 +610,17 @@ uk-healthcare-big-data-pipeline/
 │       └── visualise.py           # matplotlib chart functions
 ├── flows/
 │   └── pipeline_flow.py           # Prefect @flow + @task with retries, DQ gate, lineage
-├── notebooks/
-│   ├── 00_introduction.py         # Why pipelines? The 4 V's. Architecture.
-│   ├── 01_parallel_fetch.py       # ThreadPoolExecutor - Volume + Velocity
-│   ├── 02_raw_lake.py             # Bronze layer - Variety made visible
-│   ├── 03_duckdb_query.py         # SQL on raw JSONL - Volume
-│   ├── 04_polars_transform.py     # Lazy eval + veracity report - Veracity
-│   ├── 05_nlp_unstructured.py     # Clinical text NLP - Variety
-│   ├── 06_join_and_visualise.py   # DuckDB JOIN + matplotlib 2×2 - all 4 V's
-│   ├── 07_medallion_architecture.py  # Bronze → Silver → Gold + SCD Type 2
-│   ├── 08_streaming_simulation.py    # Streaming via generators + DuckDB
-│   ├── 09_dashboard_report.py        # Interactive dashboard + PDF/PNG export
-│   └── 10_backfill.py               # Partition-level backfill + idempotency
+├── scripts/
+│   ├── 01_fetch.py                # Parallel fetch - NHSBSA EPD + NHS.uk
+│   ├── 02_query_bronze.py         # DuckDB SQL on raw JSONL lake files
+│   ├── 03_transform.py            # Polars lazy eval + veracity report
+│   ├── 04_medallion.py            # Bronze → Silver → Gold + SCD Type 2
+│   ├── 05_nlp.py                  # Clinical text NLP - term frequency
+│   ├── 06_visualise.py            # Charts from Gold tables → outputs/
+│   ├── 07_stream.py               # Micro-batch streaming via generator + DuckDB
+│   └── 08_backfill.py             # Partition-level backfill + idempotency proof
 ├── tests/
-│   ├── test_fetch.py              # Mock httpx; response shape + keys
+│   ├── test_fetch.py              # Mock urllib; NHSBSA + NHS.uk response shape
 │   ├── test_transform.py          # Polars lazy frame + veracity report
 │   ├── test_nlp.py                # Tokeniser + top_terms
 │   ├── test_medallion.py          # Silver, Gold, SCD Type 2, backfill
@@ -651,7 +629,8 @@ uk-healthcare-big-data-pipeline/
 │   ├── test_lake.py               # Bronze read/write + atomic writes
 │   ├── test_stream.py             # Generator batching + DuckDB sink
 │   ├── test_visualise.py          # Chart rendering + export
-│   └── test_pipeline.py           # @pytest.mark.slow - live API integration tests
+│   ├── test_integration.py        # End-to-end Bronze → Silver → Gold
+│   └── test_pipeline.py           # @pytest.mark.slow - live NHSBSA API tests
 └── lake/                          # Created at runtime, gitignored (Bronze layer)
 ```
 
@@ -663,7 +642,7 @@ uk-healthcare-big-data-pipeline/
 # All unit tests - fast, no internet required
 uv run pytest tests/ -v -m "not slow"
 
-# Integration tests - hits live OpenPrescribing API
+# Integration tests - streams from live NHSBSA EPD API
 uv run pytest tests/ -v -m slow
 
 # Linting
@@ -682,7 +661,6 @@ Current test count: **190+ unit tests** across fetch, transform, NLP, medallion 
 This repository includes a `.devcontainer/devcontainer.json` configuration. Click **"Open in Codespaces"** on GitHub and the environment is set up automatically.
 
 Ports forwarded:
-- **2718** - Marimo notebook UI
 - **4200** - Prefect orchestration UI
 - **8585** - OpenMetadata UI + lineage API (optional; start with Docker Compose)
 
@@ -724,11 +702,10 @@ Ports forwarded:
 - [Prefect vs Airflow](https://www.prefect.io/blog/prefect-vs-airflow) - when to choose which
 
 ### NHS Open Data
-- [OpenPrescribing About](https://openprescribing.net/about/) - context on the prescribing data
-- [OpenPrescribing API Docs](https://openprescribing.net/api/) - all available endpoints and query parameters
-- [NHS BSA Open Data Portal](https://opendata.nhsbsa.net/) - broader NHS open data catalogue including primary care data
+- [NHSBSA Open Data Portal](https://opendata.nhsbsa.net/) - home of the English Prescribing Dataset and other NHS open data
+- [NHSBSA EPD Documentation](https://www.nhsbsa.nhs.uk/statistical-collections/english-prescribing-dataset-epd) - field definitions, BNF codes, and release schedule
 - [NHS Digital - Data and Information](https://digital.nhs.uk/data-and-information) - secondary uses and hospital episode statistics
-- [Bennett Institute for Applied Data Science](https://www.bennett.ox.ac.uk/) - Oxford team that builds and maintains OpenPrescribing
+- [OpenPrescribing](https://openprescribing.net/) - aggregated prescribing explorer built on the same NHSBSA data (useful for cross-checking your results)
 
 ### Data Contracts & Quality
 - [Pydantic Documentation](https://docs.pydantic.dev/) - data validation and settings management using Python type annotations

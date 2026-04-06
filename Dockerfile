@@ -4,8 +4,11 @@
 # Build:
 #   docker build -t uk-healthcare-pipeline .
 #
-# Run (Marimo notebook UI at http://localhost:2718):
-#   docker run -p 2718:2718 -v "$(pwd)/lake:/app/lake" uk-healthcare-pipeline
+# Run pipeline (fetches data, builds medallion layers):
+#   docker run -v "$(pwd)/lake:/app/lake" uk-healthcare-pipeline
+#
+# Run a specific script:
+#   docker run -v "$(pwd)/lake:/app/lake" uk-healthcare-pipeline uv run python scripts/01_fetch.py
 #
 # Run (Prefect UI at http://localhost:4200 — needs two terminals):
 #   docker run -p 4200:4200 -v "$(pwd)/lake:/app/lake" \
@@ -20,7 +23,7 @@
 #   The pipeline writes Bronze files to lake/ at runtime. Mounting it means:
 #   - Data persists after the container stops
 #   - You can inspect lake/ from the host machine
-#   - Multiple containers can share the same lake (e.g. Prefect + Marimo)
+#   - Multiple containers can share the same lake
 
 FROM python:3.11-slim
 
@@ -44,7 +47,7 @@ RUN uv sync --frozen --no-cache --all-groups
 # Copy application source
 COPY src/       src/
 COPY flows/     flows/
-COPY notebooks/ notebooks/
+COPY scripts/   scripts/
 COPY tests/     tests/
 
 # Runtime directories — populated when the pipeline runs.
@@ -56,18 +59,14 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Expose ports:
-#   2718 — Marimo notebook UI
 #   4200 — Prefect orchestration UI
-EXPOSE 2718 4200
+EXPOSE 4200
 
 # Health check: verify the pipeline package is importable
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD uv run python -c "import pipeline" || exit 1
 
-# Default command: open the introduction notebook.
+# Default command: run the full pipeline flow.
 # Override with any command, e.g.:
-#   docker run ... uk-healthcare-pipeline uv run python flows/pipeline_flow.py
-CMD ["uv", "run", "marimo", "edit", \
-     "--host", "0.0.0.0", \
-     "--port", "2718", \
-     "notebooks/00_introduction.py"]
+#   docker run ... uk-healthcare-pipeline uv run python scripts/01_fetch.py
+CMD ["uv", "run", "python", "flows/pipeline_flow.py"]

@@ -18,9 +18,9 @@ from pydantic import ValidationError
 
 from pipeline.contracts import (
     DEFAULT_NULL_THRESHOLDS,
+    NHSBSAPayload,
     NHSPage,
     NHSPagesPayload,
-    OpenPrescribingPayload,
     PrescribingRecord,
     SilverDQViolation,
 )
@@ -42,8 +42,9 @@ VALID_RECORD = {
 
 VALID_PRESCRIBING_PAYLOAD = {
     "drug": "metformin",
-    "bnf_code": "0601023A0",
-    "type": "openprescribing",
+    "bnf_code": "0601022B0",
+    "source": "nhsbsa_epd",
+    "resource": "EPD_202506",
     "total_rows": 1,
     "records": [VALID_RECORD],
 }
@@ -106,39 +107,40 @@ def test_prescribing_record_missing_required_field_raises():
 
 
 # ---------------------------------------------------------------------------
-# OpenPrescribingPayload
+# NHSBSAPayload
 # ---------------------------------------------------------------------------
 
 
-def test_open_prescribing_payload_valid():
-    payload = OpenPrescribingPayload.model_validate(VALID_PRESCRIBING_PAYLOAD)
+def test_nhsbsa_payload_valid():
+    payload = NHSBSAPayload.model_validate(VALID_PRESCRIBING_PAYLOAD)
     assert payload.drug == "metformin"
-    assert payload.type == "openprescribing"
+    assert payload.source == "nhsbsa_epd"
+    assert payload.resource == "EPD_202506"
     assert len(payload.records) == 1
 
 
-def test_open_prescribing_payload_wrong_type_raises():
-    bad = {**VALID_PRESCRIBING_PAYLOAD, "type": "nhs_pages"}
+def test_nhsbsa_payload_wrong_source_raises():
+    bad = {**VALID_PRESCRIBING_PAYLOAD, "source": "openprescribing"}
     with pytest.raises(ValidationError):
-        OpenPrescribingPayload.model_validate(bad)
+        NHSBSAPayload.model_validate(bad)
 
 
-def test_open_prescribing_payload_negative_total_rows_raises():
+def test_nhsbsa_payload_negative_total_rows_raises():
     bad = {**VALID_PRESCRIBING_PAYLOAD, "total_rows": -1}
     with pytest.raises(ValidationError):
-        OpenPrescribingPayload.model_validate(bad)
+        NHSBSAPayload.model_validate(bad)
 
 
-def test_open_prescribing_payload_empty_records_is_valid():
-    """An empty records list is valid — API may return no data for a drug."""
-    payload = OpenPrescribingPayload.model_validate(
+def test_nhsbsa_payload_empty_records_is_valid():
+    """An empty records list is valid — drug may have no rows in target month."""
+    payload = NHSBSAPayload.model_validate(
         {**VALID_PRESCRIBING_PAYLOAD, "records": [], "total_rows": 0}
     )
     assert payload.records == []
 
 
-def test_open_prescribing_payload_model_dump_round_trips():
-    payload = OpenPrescribingPayload.model_validate(VALID_PRESCRIBING_PAYLOAD)
+def test_nhsbsa_payload_model_dump_round_trips():
+    payload = NHSBSAPayload.model_validate(VALID_PRESCRIBING_PAYLOAD)
     dumped = payload.model_dump()
     assert dumped["drug"] == "metformin"
     assert isinstance(dumped["records"], list)
@@ -183,7 +185,7 @@ def test_nhs_pages_payload_valid():
 
 
 def test_nhs_pages_payload_wrong_type_raises():
-    bad = {**VALID_NHS_PAYLOAD, "type": "openprescribing"}
+    bad = {**VALID_NHS_PAYLOAD, "type": "nhsbsa_epd"}
     with pytest.raises(ValidationError):
         NHSPagesPayload.model_validate(bad)
 

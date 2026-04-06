@@ -55,8 +55,8 @@ def bronze_lake(tmp_path: pathlib.Path) -> pathlib.Path:
     met_records = [r for r in _BRONZE_RECORDS if r["drug"] == "metformin"]
     ato_records = [r for r in _BRONZE_RECORDS if r["drug"] == "atorvastatin"]
 
-    write_lake({"drug": "metformin",    "type": "openprescribing", "records": met_records}, tmp_path)
-    write_lake({"drug": "atorvastatin", "type": "openprescribing", "records": ato_records}, tmp_path)
+    write_lake({"drug": "metformin",    "type": "nhsbsa_epd", "records": met_records}, tmp_path)
+    write_lake({"drug": "atorvastatin", "type": "nhsbsa_epd", "records": ato_records}, tmp_path)
     return tmp_path
 
 
