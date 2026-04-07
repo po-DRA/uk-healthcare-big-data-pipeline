@@ -43,16 +43,41 @@ uv run python scripts/01_fetch.py
 
 **What you will do**
 
-Watch the output as data is fetched for seven drugs (metformin, liraglutide, semaglutide, tirzepatide, atorvastatin, lisinopril, salbutamol) concurrently from NHSBSA and NHS.uk.
+Watch the output as data is fetched for 12 drugs (including GLP-1 weight-loss drugs semaglutide/Ozempic and liraglutide/Saxenda) concurrently from NHSBSA and NHS.uk. Each drug's prescribing records land in a month-partitioned Bronze directory.
 
 **What you will learn**
 
-- How to stream a large CSV file (NHSBSA English Prescribing Dataset — 6.9 GB/month) with early-exit filtering — only ~46 MB is read to collect 500 rows per drug
+- How to stream a large CSV file (NHSBSA English Prescribing Dataset — 6.9 GB/month) without downloading it — only matching rows are kept
 - How to scrape clinical content from `NHS.uk` pages
 - How `ThreadPoolExecutor` fetches multiple drugs in parallel instead of one-at-a-time
-- Why parallelism matters at NHS scale: fetching 50 drugs sequentially at 1 second each = 50 seconds; in parallel = ~2 seconds
+- Why Bronze is partitioned by month — each run adds data without overwriting history
 
-**Check:** You should see a lake summary table listing `prescribing.jsonl` and `nhs_pages.json` for each of the four drugs.
+**Controlling volume**
+
+Two environment variables let you trade off fetch time against data volume:
+
+| Variable | Default | Use case |
+|----------|---------|----------|
+| `NHSBSA_MONTHS` | `1` | Number of monthly EPD files to fetch |
+| `NHSBSA_ROWS_PER_DRUG` | _(all)_ | Cap rows per drug — useful for quick tests |
+
+```bash
+# Quick smoke test — 500 rows per drug, ~5 MB, ~30 seconds
+NHSBSA_ROWS_PER_DRUG=500 uv run python scripts/01_fetch.py
+
+# Default — latest month, all rows, ~500 MB, ~10-20 minutes
+uv run python scripts/01_fetch.py
+
+# 2 months of history — good for demos, ~1 GB Bronze
+NHSBSA_MONTHS=2 uv run python scripts/01_fetch.py
+
+# Maximum local volume — 6 months, ~3+ GB Bronze
+NHSBSA_MONTHS=6 uv run python scripts/01_fetch.py
+```
+
+Silver automatically reads across all month partitions — you do not need to change anything in Labs 02-08 after fetching more months.
+
+**Check:** You should see output like `OK metformin/EPD_202506: 68,432 rows [EPD_202506]` for each drug, and a lake directory listing showing `metformin/EPD_202506/`, `atorvastatin/EPD_202506/` etc.
 
 ---
 

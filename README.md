@@ -82,19 +82,51 @@ This course uses **numbered Python scripts** that you run from the terminal — 
 | NHSBSA English Prescribing Dataset (EPD) | https://opendata.nhsbsa.net/ | CSV (6.9 GB/month, streamed) | Open Government Licence v3.0 |
 | NHS.uk Medicines Pages | https://www.nhs.uk/medicines/ | HTML (scraped) | Open Government Licence v3.0 |
 
-No API keys required for either source. The NHSBSA CSV is streamed with early-exit filtering — only ~46 MB is read to collect 500 rows per drug.
+No API keys required for either source. The NHSBSA CSV is streamed with early-exit filtering — by default all matching rows are collected per drug per month.
+
+### Controlling Data Volume
+
+Bronze data is partitioned by month (`lake/{drug}/{EPD_YYYYMM}/prescribing.jsonl`). Each run of `scripts/01_fetch.py` adds new partitions without touching previous ones — Bronze is write-once per partition.
+
+| Environment variable | Default | Effect |
+|---------------------|---------|--------|
+| `NHSBSA_MONTHS` | `1` | Number of monthly EPD files to fetch |
+| `NHSBSA_ROWS_PER_DRUG` | _(all rows)_ | Cap rows per drug per month — useful for quick dev runs |
+
+```bash
+# Default: latest month only, all rows per drug (~500 MB Bronze)
+uv run python scripts/01_fetch.py
+
+# Demo / quick run: latest month, 500 rows per drug (~5 MB)
+NHSBSA_ROWS_PER_DRUG=500 uv run python scripts/01_fetch.py
+
+# 2 months of history (course demo — ~1 GB Bronze)
+NHSBSA_MONTHS=2 uv run python scripts/01_fetch.py
+
+# Maximum local volume: 6 months, all rows (~3+ GB Bronze)
+NHSBSA_MONTHS=6 uv run python scripts/01_fetch.py
+```
+
+Silver automatically reads across all partitions — no changes needed after adding months.
 
 ### The Drugs Used Throughout
 
-| Drug | BNF Code | Brand names | Indication |
-|------|----------|-------------|-----------|
-| Metformin | 0601022B0 | — | Type 2 diabetes (most prescribed drug in England) |
-| Liraglutide | 0601023AB | Saxenda, Victoza | Weight management / Type 2 diabetes |
-| Semaglutide | 0601023AW | Ozempic, Wegovy | Weight management / Type 2 diabetes |
-| Tirzepatide | 0601023AZ | Mounjaro | Type 2 diabetes / Weight management |
-| Atorvastatin | 0212000B0 | — | High cholesterol |
-| Lisinopril | 0205051L0 | — | Hypertension / Heart failure |
-| Salbutamol | 0301011R0 | Ventolin | Asthma / COPD |
+Bronze holds all 12 drugs. Silver promotes 10 for analysis (liraglutide and tirzepatide remain Bronze-only, available for future promotion).
+
+| Drug | BNF Code | Brand names | Indication | Layer |
+|------|----------|-------------|-----------|-------|
+| Metformin | 0601022B0 | — | Type 2 diabetes (most prescribed in England) | Bronze + Silver |
+| Semaglutide | 0601023AW | Ozempic, Wegovy | Weight management / Type 2 diabetes | Bronze + Silver |
+| Atorvastatin | 0212000B0 | — | High cholesterol | Bronze + Silver |
+| Simvastatin | 0212000Y0 | — | High cholesterol (older statin) | Bronze + Silver |
+| Aspirin | 0209000A0 | — | Antiplatelet (cardiovascular prevention) | Bronze + Silver |
+| Lisinopril | 0205051L0 | — | Hypertension / Heart failure | Bronze + Silver |
+| Lansoprazole | 0103050E0 | Zoton | Acid reflux / Proton pump inhibitor | Bronze + Silver |
+| Levothyroxine | 0602010V0 | — | Thyroid hormone replacement | Bronze + Silver |
+| Salbutamol | 0301011R0 | Ventolin | Asthma / COPD | Bronze + Silver |
+| Amoxicillin | 0501013B0 | — | Broad-spectrum antibiotic (seasonal spikes) | Bronze + Silver |
+| Liraglutide | 0601023AB | Saxenda, Victoza | Weight management / Type 2 diabetes | Bronze only |
+| Tirzepatide | 0601023AZ | Mounjaro | Type 2 diabetes / Weight management | Bronze only |
 
 ---
 
