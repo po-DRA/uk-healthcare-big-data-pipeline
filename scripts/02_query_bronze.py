@@ -9,7 +9,7 @@ no loading into memory, no schema setup, no database server.
 DuckDB reads the files on disk using a glob pattern that matches all four
 drug directories at once:
 
-    lake/*/prescribing.jsonl
+    lake/*/*/prescribing.jsonl
 
 Why this matters
 ----------------
@@ -46,7 +46,10 @@ LAKE_DIR = pathlib.Path("lake")
 def _print_result(rel: duckdb.DuckDBPyRelation) -> None:
     cols = [d[0] for d in rel.description]
     rows = rel.fetchall()
-    col_widths = [max(len(c), max((len(str(r[i])) for r in rows), default=0)) for i, c in enumerate(cols)]
+    col_widths = [
+        max(len(c), max((len(str(r[i])) for r in rows), default=0))
+        for i, c in enumerate(cols)
+    ]
     header = "  ".join(c.ljust(col_widths[i]) for i, c in enumerate(cols))
     print(header)
     print("  ".join("-" * w for w in col_widths))
@@ -55,9 +58,9 @@ def _print_result(rel: duckdb.DuckDBPyRelation) -> None:
 
 
 def main() -> None:
-    jsonl_glob = str(LAKE_DIR / "*" / "prescribing.jsonl")
+    jsonl_glob = str(LAKE_DIR / "*" / "*" / "prescribing.jsonl")
 
-    prescribing_files = list(LAKE_DIR.glob("*/prescribing.jsonl"))
+    prescribing_files = list(LAKE_DIR.glob("*/*/prescribing.jsonl"))
     if not prescribing_files:
         print("No Bronze data found. Run scripts/01_fetch.py first.")
         return

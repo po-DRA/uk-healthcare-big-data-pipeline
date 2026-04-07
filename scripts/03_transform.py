@@ -53,7 +53,7 @@ LAKE_DIR = pathlib.Path("lake")
 
 
 def main() -> None:
-    prescribing_files = list(LAKE_DIR.glob("*/prescribing.jsonl"))
+    prescribing_files = list(LAKE_DIR.glob("*/*/prescribing.jsonl"))
     if not prescribing_files:
         print("No Bronze data found. Run scripts/01_fetch.py first.")
         return

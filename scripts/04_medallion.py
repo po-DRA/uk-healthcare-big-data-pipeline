@@ -81,7 +81,7 @@ def _print_result(rel: duckdb.DuckDBPyRelation) -> None:
 
 
 def main() -> None:
-    prescribing_files = list(LAKE_DIR.glob("*/prescribing.jsonl"))
+    prescribing_files = list(LAKE_DIR.glob("*/*/prescribing.jsonl"))
     if not prescribing_files:
         print("No Bronze data found. Run scripts/01_fetch.py first.")
         return
@@ -89,7 +89,7 @@ def main() -> None:
     print(f"\nDatabase: {DB_PATH.resolve()}")
 
     # --- Silver ---
-    bronze_drugs = sorted(p.parent.name for p in prescribing_files)
+    bronze_drugs = sorted({p.parent.parent.name for p in prescribing_files})
     print(f"\nBronze holds {len(bronze_drugs)} drugs: {', '.join(bronze_drugs)}")
     print(f"Silver will promote {len(SILVER_DRUGS)} drugs: {', '.join(SILVER_DRUGS)}")
     print("  (remaining stay in Bronze for future use)")
