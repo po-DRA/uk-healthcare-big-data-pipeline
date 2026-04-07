@@ -149,6 +149,45 @@ Run all steps in order. After Silver is built, the script queries `silver.prescr
 
 **Check:** The script prints row counts for Silver and each Gold table, then proves idempotency by running twice and comparing.
 
+**Customising the tables for your reporting needs**
+
+The medallion architecture is designed to be changed — but changes flow downward only:
+
+```
+Bronze  ← never touch (raw source of truth)
+  ↓
+Silver  ← change types, add derived columns, change drug filter
+  ↓
+Gold    ← add/remove tables, change aggregations freely
+```
+
+To add or remove a Silver column, edit `build_silver()` in [src/pipeline/medallion.py](src/pipeline/medallion.py) and re-run this script. Gold rebuilds automatically from the updated Silver.
+
+To add a new Gold table (e.g. a cost-per-ICB summary for a Power BI report), add a `CREATE TABLE gold.my_table AS SELECT ...` block inside `build_gold()` in the same file. No other changes needed.
+
+To change which drugs appear in Silver, update `SILVER_DRUGS` at the top of `medallion.py` — any drug already in Bronze (fetched in Lab 01) can be promoted instantly.
+
+**What is idempotency and why does it matter?**
+
+Idempotency means: running the pipeline twice produces exactly the same result as running it once. Re-running never corrupts, duplicates, or deletes data that should not be touched.
+
+This matters in three real scenarios:
+
+1. **A run fails halfway through.** Without idempotency you have a partially-built Silver table in an unknown state. With idempotency you simply re-run — the pipeline rebuilds Silver from scratch and you end up with a correct table as if nothing went wrong.
+
+2. **You fix a bug in the transform logic.** You update the SQL, re-run, and Silver/Gold are rebuilt correctly. You do not need to manually clean up the old state first.
+
+3. **A scheduled job runs twice** (e.g. a retry after a timeout). With idempotency the second run produces the same output as the first — no duplicate rows, no inflated counts.
+
+How it works here: `build_silver()` uses an atomic table swap — it builds `silver.prescribing_new` completely, then renames it to `silver.prescribing` in one operation. The old table is dropped. Readers either see the old table or the new one — never an empty or partial table. `build_gold()` drops and recreates each Gold table from Silver on every run.
+
+Try it yourself — run Lab 04 twice and compare the row counts:
+
+```bash
+uv run python scripts/04_medallion.py
+uv run python scripts/04_medallion.py  # identical output
+```
+
 **Exploring the DuckDB file directly**
 
 After Lab 04 you have a `pipeline.duckdb` file with all Silver and Gold tables. You can query it at any time without re-running the script:
