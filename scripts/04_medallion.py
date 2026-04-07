@@ -122,7 +122,7 @@ def main() -> None:
         print("\n  gold.drug_summary (top 3 by total cost):")
         df = con.execute("""
             SELECT drug, total_items, ROUND(total_cost_gbp, 2) AS cost_gbp,
-                   ROUND(avg_cost_per_item, 4) AS cost_per_item
+                   ROUND(avg_nic_per_item, 4) AS cost_per_item
             FROM gold.drug_summary
             ORDER BY cost_gbp DESC LIMIT 3
         """)
