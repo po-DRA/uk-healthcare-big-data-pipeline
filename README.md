@@ -521,6 +521,37 @@ WHERE practice_id = 'E84006'
 -- Returns: 03V  (the old CCG - correct for that date)
 ```
 
+Run any SQL query against `pipeline.duckdb` directly from the terminal — no database server needed:
+
+```bash
+# List all practice versions (current and historical)
+uv run python -c "
+import duckdb
+duckdb.connect('pipeline.duckdb').sql('''
+    SELECT practice_id, ccg, setting, valid_from, valid_to, is_current
+    FROM gold.dim_practice
+    ORDER BY practice_id, valid_from
+    LIMIT 20
+''').show()
+"
+
+# Find a real practice_id from your data, then query its version history
+uv run python -c "
+import duckdb
+con = duckdb.connect('pipeline.duckdb')
+# Step 1: pick any practice_id from the dimension
+pid = con.execute('SELECT practice_id FROM gold.dim_practice LIMIT 1').fetchone()[0]
+print(f'Querying practice: {pid}')
+# Step 2: point-in-time query — which CCG/ICB was this practice in on a given date?
+con.execute('''
+    SELECT ccg, valid_from, valid_to, is_current
+    FROM gold.dim_practice
+    WHERE practice_id = ?
+    ORDER BY valid_from
+''', [pid]).show()
+"
+```
+
 #### How it is implemented here
 
 `build_dim_practice()` in `medallion.py` uses DuckDB window functions:
