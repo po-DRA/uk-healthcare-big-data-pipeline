@@ -474,12 +474,14 @@ You have completed a Level 0-2 data pipeline. The patterns you have used here - 
 
 | This course | Production equivalent |
 |---|---|
-| DuckDB | Snowflake, BigQuery, Redshift |
-| Polars lazy frames | Spark (same lazy DAG concept) |
+| DuckDB | Snowflake, BigQuery, Redshift, **Databricks SQL Warehouse** |
+| Polars lazy frames | Spark / PySpark (same lazy DAG concept) - runs natively on **Databricks** |
 | Python generator | Kafka / Redpanda topic |
-| Prefect `@task` | Airflow DAG task |
-| Bronze/Silver/Gold DuckDB schemas | Delta Lake / Apache Iceberg on S3 |
-| OpenLineage log output | OpenMetadata with full UI |
+| Prefect `@task` | Airflow DAG task / **Databricks Workflows** |
+| Bronze/Silver/Gold DuckDB schemas | Delta Lake / Apache Iceberg on S3 - **Databricks Delta Live Tables** |
+| `build_silver()` DuckDB SQL | PySpark SQL on Databricks - same ANSI SQL, same medallion logic |
+| OpenLineage log output | OpenMetadata with full UI / **Databricks Unity Catalog** (automatic lineage) |
+| Docker container | Databricks cluster / container runtime |
 
 The next step is to run one of these tools against the same data - the pipeline logic does not change, only the execution engine.
 
