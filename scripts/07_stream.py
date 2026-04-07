@@ -84,8 +84,8 @@ STREAM_DRUG = "metformin"  # stream one drug for the demo
 
 
 def main() -> None:
-    jsonl_path = LAKE_DIR / STREAM_DRUG / "prescribing.jsonl"
-    if not jsonl_path.exists():
+    partitions = sorted((LAKE_DIR / STREAM_DRUG).glob("*/prescribing.jsonl"))
+    if not partitions:
         print(f"Bronze data not found for {STREAM_DRUG}.")
         print("Run scripts/01_fetch.py first.")
         return
