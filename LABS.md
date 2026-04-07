@@ -482,3 +482,176 @@ You have completed a Level 0-2 data pipeline. The patterns you have used here - 
 | OpenLineage log output | OpenMetadata with full UI |
 
 The next step is to run one of these tools against the same data - the pipeline logic does not change, only the execution engine.
+
+---
+
+## Going Further - Scheduling, Logging, and Error Handling
+
+These are three things you can add to this pipeline yourself. Each is a small, self-contained change that teaches a real production pattern.
+
+---
+
+### 1. Write logs to a file
+
+Currently all pipeline logs go to the terminal only. Adding a log file lets you inspect what happened after a run, compare runs over time, and diagnose failures without re-running.
+
+Open `scripts/01_fetch.py` and replace line 57:
+
+```python
+# Before
+logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(message)s")
+
+# After - write to terminal AND a log file
+import pathlib
+pathlib.Path("logs").mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    handlers=[
+        logging.StreamHandler(),                        # terminal output unchanged
+        logging.FileHandler("logs/pipeline.log"),      # also write to file
+    ],
+)
+```
+
+The same change applies to any other script you want to capture logs from.
+
+Run it and inspect the output:
+
+```bash
+mkdir -p logs
+uv run python scripts/01_fetch.py
+
+# Read the full log after the run
+cat logs/pipeline.log
+
+# Or watch it live while the script is running (open a second terminal)
+tail -f logs/pipeline.log
+```
+
+The log file will contain timestamped entries like:
+
+```
+2026-04-07 08:01:23 | INFO | pipeline.fetch | metformin: 50,000 rows collected
+2026-04-07 08:01:45 | WARNING | pipeline.fetch | 404 for https://www.nhs.uk/... - skipping
+2026-04-07 08:02:01 | INFO | pipeline.lake | Wrote 50,000 records to lake/metformin/EPD_202506/prescribing.jsonl
+```
+
+To prevent the log file growing indefinitely across many runs, swap `FileHandler` for `RotatingFileHandler`:
+
+```python
+from logging.handlers import RotatingFileHandler
+
+logging.basicConfig(
+    handlers=[
+        logging.StreamHandler(),
+        RotatingFileHandler("logs/pipeline.log", maxBytes=5_000_000, backupCount=3),
+    ],
+)
+```
+
+This keeps the last 3 rotated files (up to 5 MB each) and deletes older ones automatically.
+
+---
+
+### 2. Schedule the pipeline to run automatically
+
+#### Option A - GitHub Actions (recommended for Codespaces)
+
+Create a new file `.github/workflows/schedule.yml`:
+
+```yaml
+name: Monthly Pipeline Run
+
+on:
+  schedule:
+    - cron: "0 8 1 * *"   # 08:00 UTC on the 1st of every month
+  workflow_dispatch:        # also allow manual trigger from GitHub UI
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run pipeline
+        env:
+          NHSBSA_ROWS_PER_DRUG: "50000"   # cap rows for CI - remove for full run
+        run: uv run python flows/pipeline_flow.py
+```
+
+Push this file to your repository. GitHub will automatically run the pipeline every month and show the logs in the **Actions** tab. You can also trigger it manually from the GitHub UI using `workflow_dispatch`.
+
+**Why this is good for learning:** you can see the full run history, download logs as artifacts, and get email notifications on failure - all without keeping a server running.
+
+#### Option B - Prefect schedule (if running a dedicated server)
+
+Add one line to `flows/pipeline_flow.py`:
+
+```python
+from prefect.schedules import CronSchedule
+
+@flow(
+    name="UK Healthcare Big Data Pipeline",
+    log_prints=True,
+    schedules=[CronSchedule(cron="0 8 1 * *", timezone="Europe/London")],
+)
+def run_pipeline(...):
+```
+
+Then deploy it so Prefect tracks the schedule:
+
+```bash
+# Terminal 1 - keep the server running
+uv run prefect server start
+
+# Terminal 2 - register the deployment
+uv run prefect deploy flows/pipeline_flow.py:run_pipeline --name monthly-nhs --pool default-agent-pool
+```
+
+The flow will now appear in the Prefect UI with a next-run countdown.
+
+#### Option C - System cron (Linux/Mac local setup)
+
+```bash
+crontab -e
+# Add this line - runs at 08:00 on 1st of every month:
+0 8 1 * * cd /path/to/uk-healthcare-big-data-pipeline && uv run python flows/pipeline_flow.py >> logs/pipeline.log 2>&1
+```
+
+Replace `/path/to/uk-healthcare-big-data-pipeline` with the actual path from `pwd`.
+
+---
+
+### 3. Error handling - what is already built in
+
+You do not need to add error handling from scratch. The pipeline already handles the most common failure modes:
+
+| What could go wrong | How it is handled |
+|---|---|
+| NHSBSA API is down or slow | `tenacity` retries 3 times with exponential backoff (2-10 seconds between attempts) |
+| One drug fails to fetch | Logged and skipped - the other 11 drugs continue normally |
+| Malformed value in source data | `TRY_CAST` converts bad values to NULL instead of crashing |
+| Silver null rate too high | `SilverDQViolation` halts the pipeline before bad data reaches Gold |
+| Bronze file write interrupted | Atomic tmp-file rename - no half-written files are ever left behind |
+| Lineage backend unreachable | Warning is logged, pipeline continues - lineage is non-blocking |
+| Prefect task fails transiently | `@task(retries=2)` retries automatically with exponential backoff |
+
+**What you could add yourself:**
+
+- **Slack or email alert on failure**: Prefect supports notification blocks. Add `send_slack_webhook` to `validate_silver_task` so you get a message when the DQ gate fails.
+- **Dead letter logging**: write failed drug payloads to `logs/failed/` so you can replay them later rather than losing them silently.
+
+Both are two-to-five line additions to `flows/pipeline_flow.py`.

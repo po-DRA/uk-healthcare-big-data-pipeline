@@ -1,0 +1,29 @@
+name: Monthly Pipeline Run
+
+on:
+  schedule:
+    - cron: "0 8 1 * *"   # 08:00 UTC on the 1st of every month
+  workflow_dispatch:        # allow manual trigger from GitHub Actions UI
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Run pipeline
+        env:
+          NHSBSA_ROWS_PER_DRUG: "50000"   # cap rows per drug for scheduled runs
+        run: uv run python flows/pipeline_flow.py
