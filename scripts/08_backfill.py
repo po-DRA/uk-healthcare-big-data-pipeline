@@ -40,7 +40,7 @@ Run
     uv run python scripts/08_backfill.py
 
     # Override date range
-    BACKFILL_FROM=202501 BACKFILL_TO=202503 uv run python scripts/08_backfill.py
+    BACKFILL_FROM=2025-05 BACKFILL_TO=2025-06 uv run python scripts/08_backfill.py
 
 Prerequisites
 -------------
@@ -63,8 +63,9 @@ LAKE_DIR = pathlib.Path("lake")
 DB_PATH = pathlib.Path("pipeline.duckdb")
 
 # Default: backfill the most recent month in Silver
-BACKFILL_FROM = os.environ.get("BACKFILL_FROM", "202506")
-BACKFILL_TO = os.environ.get("BACKFILL_TO", "202506")
+# year_month format is YYYY-MM (e.g. 2025-06) matching Silver's year_month column
+BACKFILL_FROM = os.environ.get("BACKFILL_FROM", "2025-06")
+BACKFILL_TO = os.environ.get("BACKFILL_TO", "2025-06")
 
 
 def main() -> None:

@@ -333,7 +333,10 @@ def build_silver_for_range(
                     / NULLIF(TRY_CAST(items AS BIGINT), 0),
                     4
                 )                                                            AS nic_per_item,
-                STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')                   AS year_month,
+                COALESCE(
+                    STRFTIME(TRY_STRPTIME(CAST(date AS VARCHAR), '%Y%m'), '%Y-%m'),
+                    STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')
+                )                                                            AS year_month,
                 now()                                                        AS ingested_at
             FROM read_json(
                 '{glob_pattern}',
