@@ -67,15 +67,13 @@ def main() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
 
     with duckdb.connect(str(DB_PATH), read_only=True) as con:
-        # Load Gold data
-        summary_df = con.execute("SELECT * FROM gold.drug_summary").fetchdf()
-        monthly_df = con.execute("SELECT * FROM gold.drug_monthly_spend").fetchdf()
+        # Load Gold data as Polars DataFrames
+        summary_df = con.execute("SELECT * FROM gold.drug_summary").pl()
+        monthly_df = con.execute("SELECT * FROM gold.drug_monthly_spend").pl()
 
     print(f"\nGold data loaded:")
     print(f"  drug_summary: {len(summary_df)} drugs")
     print(f"  drug_monthly_spend: {len(monthly_df)} drug-month rows")
-
-    drugs = summary_df["drug"].tolist()
 
     # Chart 1: Items by drug
     print("\nGenerating chart 1: Items prescribed per drug...")
@@ -92,7 +90,9 @@ def main() -> None:
     print(f"  Saved: outputs/{fname2}")
 
     # Chart 3: Monthly trend for the highest-cost drug
-    highest_cost_drug = summary_df.sort_values("total_cost_gbp", ascending=False).iloc[0]["drug"]
+    highest_cost_drug = (
+        summary_df.sort("total_cost_gbp", descending=True)["drug"][0]
+    )
     print(f"Generating chart 3: Monthly trend for {highest_cost_drug}...")
     fig3 = plot_monthly_trend(monthly_df, drug=highest_cost_drug)
     fname3 = report_filename(f"monthly_trend_{highest_cost_drug}")
@@ -101,7 +101,7 @@ def main() -> None:
 
     print(f"\nAll charts saved to {OUTPUT_DIR.resolve()}")
     print("\nGold summary:")
-    print(summary_df[["drug", "total_items", "total_cost_gbp", "avg_cost_per_item"]].to_string(index=False))
+    print(summary_df.select(["drug", "total_items", "total_cost_gbp", "avg_cost_per_item"]))
 
 
 if __name__ == "__main__":

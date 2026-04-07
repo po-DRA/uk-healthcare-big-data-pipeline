@@ -100,8 +100,8 @@ def main() -> None:
                    ROUND(avg_cost_per_item, 4) AS cost_per_item
             FROM gold.drug_summary
             ORDER BY cost_gbp DESC LIMIT 3
-        """).fetchdf()
-        print(df.to_string(index=False))
+        """).pl()
+        print(df)
 
         scd2 = con.execute("""
             SELECT COUNT(*) AS total_rows,
@@ -114,7 +114,7 @@ def main() -> None:
     print(f"\nDone. DuckDB file: {DB_PATH.resolve()}")
     print("Query it directly: uv run python -c \"import duckdb; "
           "con=duckdb.connect('pipeline.duckdb'); "
-          "print(con.execute('SHOW TABLES').fetchdf())\"")
+          "print(con.execute('SHOW TABLES').pl())\"")
 
 
 if __name__ == "__main__":

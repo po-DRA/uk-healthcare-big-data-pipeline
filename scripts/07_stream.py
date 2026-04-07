@@ -102,9 +102,9 @@ def main() -> None:
             GROUP BY batch_num
             ORDER BY batch_num
             LIMIT 10
-        """).fetchdf()
-        print(df.to_string(index=False))
-        total_batches = result['total_batches']
+        """).pl()
+        print(df)
+        total_batches = result["total_batches"]
         if total_batches > 10:
             print(f"  ... ({total_batches - 10} more batches not shown)")
 

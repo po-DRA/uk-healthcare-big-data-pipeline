@@ -69,8 +69,8 @@ def main() -> None:
             FROM read_ndjson('{jsonl_glob}', ignore_errors=true)
             GROUP BY drug
             ORDER BY drug
-        """).fetchdf()
-        print(result.to_string(index=False))
+        """).pl()
+        print(result)
 
         # --- Query 2: top 5 ICBs by total cost across all drugs ---
         print("\n" + "=" * 55)
@@ -87,8 +87,8 @@ def main() -> None:
             GROUP BY ccg
             ORDER BY total_cost_gbp DESC
             LIMIT 5
-        """).fetchdf()
-        print(result2.to_string(index=False))
+        """).pl()
+        print(result2)
 
         # --- Query 3: cross-drug cost-per-item comparison ---
         print("\n" + "=" * 55)
@@ -103,8 +103,8 @@ def main() -> None:
             FROM read_ndjson('{jsonl_glob}', ignore_errors=true)
             GROUP BY drug
             ORDER BY avg_cost_per_item_gbp DESC
-        """).fetchdf()
-        print(result3.to_string(index=False))
+        """).pl()
+        print(result3)
 
     print("\nDone. No files were modified — Bronze is read-only.")
 
