@@ -142,7 +142,7 @@ def main() -> None:
     print(
         'Query it directly: uv run python -c "import duckdb; '
         "con=duckdb.connect('pipeline.duckdb'); "
-        "print(con.execute('SHOW TABLES').pl())\""
+        "[print(r) for r in con.execute('SHOW ALL TABLES').fetchall()]\""
     )
 
 
