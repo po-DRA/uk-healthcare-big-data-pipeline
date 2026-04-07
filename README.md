@@ -701,6 +701,89 @@ Ports forwarded:
 
 ---
 
+## Taking This Pipeline to Production
+
+This codebase is a complete, working data pipeline — not a toy. The architectural patterns (medallion layers, idempotency, SCD Type 2, partitioned Bronze, backfill, lineage) are identical to what runs in production at NHS trusts and large healthcare organisations. The difference is the **execution engine**: this pipeline runs on a single machine; production pipelines run on distributed clusters.
+
+### How This Maps to Databricks / PySpark
+
+If you have seen Databricks Delta Live Tables (DLT) pipelines, this codebase covers the same ground:
+
+| This pipeline | Databricks / PySpark equivalent | What is the same |
+|--------------|--------------------------------|-----------------|
+| `lake/{drug}/{EPD_YYYYMM}/prescribing.jsonl` | Delta Lake table on S3/ADLS, partitioned by `year_month` | Write-once Bronze, partition-per-month pattern |
+| `build_silver()` in `medallion.py` (DuckDB SQL) | DLT `@dlt.table` Silver node (PySpark SQL) | TRY_CAST, null filtering, derived columns — identical logic |
+| `build_gold()` (DuckDB aggregations) | DLT `@dlt.table` Gold node | GROUP BY aggregations, same SQL |
+| `validate_silver_task` null-rate checks | DLT Expectations (`@dlt.expect_or_drop`) | Declarative quality rules blocking bad rows |
+| `build_dim_practice()` SCD Type 2 (LEAD/PARTITION BY) | Delta `MERGE INTO` with SCD Type 2 logic | Same window function logic |
+| `build_silver_for_range()` backfill | Delta Lake `MERGE INTO` with partition overwrite | Idempotent re-processing of a date range |
+| `prescribing_event_stream()` generator | Kafka topic + Spark Structured Streaming | Same micro-batch semantics, swap source |
+| Prefect `@flow` / `@task` | Databricks Workflows or Apache Airflow DAG | Retry logic, task dependencies, scheduling |
+| `lineage.py` OpenLineage events | Unity Catalog automatic lineage | Column-level provenance tracked automatically |
+
+### Concrete Migration Path
+
+If you want to move this pipeline to Databricks, here is the sequence — each step is independently deployable:
+
+**Step 1 — Swap storage: JSONL → Delta Lake**
+
+Replace `lake.py` writes with Delta format. The Bronze partitioning stays identical.
+
+```python
+# Current (lake.py)
+with open("lake/metformin/EPD_202506/prescribing.jsonl", "w") as f: ...
+
+# Databricks equivalent
+df.write.format("delta").mode("append").partitionBy("drug", "year_month") \
+    .save("abfss://bronze@yourstorage.dfs.core.windows.net/prescribing")
+```
+
+**Step 2 — Swap compute: DuckDB → PySpark**
+
+`medallion.py` SQL runs unchanged inside a Spark session — DuckDB SQL is ANSI-compliant.
+
+```python
+# Current (medallion.py)
+con.execute("CREATE TABLE silver.prescribing_new AS SELECT TRY_CAST(...) ...")
+
+# PySpark equivalent
+spark.sql("CREATE OR REPLACE TABLE silver.prescribing AS SELECT TRY_CAST(...) ...")
+```
+
+**Step 3 — Wrap in DLT (optional)**
+
+Replace the `build_silver()` / `build_gold()` functions with `@dlt.table` decorators. Databricks handles orchestration, retries, and lineage automatically.
+
+**Step 4 — Replace the generator with Kafka**
+
+`prescribing_event_stream()` in `stream.py` has the same API as a Kafka consumer — the downstream DuckDB/Spark write logic does not change.
+
+```python
+# Current (stream.py)
+for batch in prescribing_event_stream(lake_dir, drug, batch_size):  ...
+
+# Kafka equivalent
+consumer = KafkaConsumer("prescribing-events", ...)
+for message in consumer:  ...   # same batch processing logic
+```
+
+**Step 5 — Connect Gold to Power BI / Tableau**
+
+Gold tables (`gold.drug_summary`, `gold.drug_monthly_spend`, `gold.practice_leaderboard`) are already aggregated and BI-ready. In Databricks, expose them via SQL Warehouse; locally, connect Power BI Desktop directly to `pipeline.duckdb` using the DuckDB ODBC driver.
+
+### What Genuinely Differs at Scale
+
+These are the things you will encounter in production that this single-node pipeline does not teach:
+
+- **Spark shuffle** — distributed joins require explicit partitioning strategies; skewed keys cause stragglers
+- **Kafka offset management** — at-least-once vs exactly-once delivery, consumer group rebalancing
+- **Cloud cost** — BigQuery slot hours, Redshift concurrency scaling, S3 egress fees — none of this is visible locally
+- **Concurrent writers** — Delta Lake handles this with optimistic concurrency; DuckDB is single-writer
+
+Everything else — the architecture, the SQL, the quality checks, the SCD logic, the backfill strategy — transfers directly.
+
+---
+
 ## Further Reading
 
 ### The 4 V's of Big Data
@@ -757,20 +840,6 @@ Ports forwarded:
 - [Delta Lake - Time Travel](https://docs.delta.io/latest/delta-utility.html#restore-a-delta-table-to-an-earlier-state) - how Delta Lake handles re-processing with MERGE and time travel
 - [Apache Iceberg - Partitioning](https://iceberg.apache.org/docs/latest/partitioning/) - hidden partitioning that makes backfill scans efficient
 - [Kafka - Offset Management](https://kafka.apache.org/documentation/#consumerconfigs_auto.offset.reset) - how Kafka consumers replay historical messages for backfill
-
-### Future: Distributed Extensions
-This pipeline deliberately runs on a single node (DuckDB + Polars) so you can focus on architecture, not infrastructure.  When you are ready to scale to distributed systems, the architectural patterns transfer directly:
-
-| Single-node (this pipeline) | Distributed equivalent | What changes |
-|-----------------------------|------------------------|-------------|
-| `duckdb.connect()` SQL | Apache Spark + `pyspark.sql` | Replace connection with `SparkSession`; SQL syntax is nearly identical |
-| JSONL files in `lake/` | Delta Lake or Apache Iceberg on S3/GCS | Replace file writes with `df.write.format("delta").save(path)`; ACID guarantees at scale |
-| Python generator stream | Apache Kafka consumer | Replace `prescribing_event_stream()` with `KafkaConsumer`; batch logic is unchanged |
-| DuckDB `DELETE` + `INSERT` backfill | Delta Lake `MERGE INTO` | MERGE handles upserts atomically and records history in the transaction log |
-| `validate_silver_task` null checks | Great Expectations suite | Replace threshold dict with a GE `ExpectationSuite`; same concept, declarative YAML |
-| `lineage.py` log-only mode | Full OpenMetadata | Set `OPENLINEAGE_URL=http://localhost:8585`; no code changes needed |
-
-**Recommended next step:** replace the DuckDB storage layer with Delta Lake by swapping `medallion.py` for a PySpark + `delta` session.  The Bronze lake stays unchanged; only Silver/Gold writes use Delta format.  This unlocks time travel, MERGE-based backfill, and concurrent writer safety.
 
 ### General Data Engineering
 - [Pessini's Pipeline Guide](https://pessini.medium.com/building-end-to-end-data-pipelines-a-hands-on-guide-for-data-scientists-part-1-adcdc7bce22a) - the article that inspired this course
