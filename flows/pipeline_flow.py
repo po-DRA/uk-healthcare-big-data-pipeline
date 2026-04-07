@@ -36,7 +36,7 @@ from prefect import flow, task
 from prefect.tasks import exponential_backoff
 
 from pipeline.contracts import DEFAULT_NULL_THRESHOLDS, SilverDQViolation
-from pipeline.fetch import DRUG_CODES, fetch_nhsbsa, fetch_nhs_pages
+from pipeline.fetch import DRUG_CODES, fetch_nhs_pages, fetch_nhsbsa
 from pipeline.lake import write_lake
 from pipeline.lineage import dataset, lineage_job
 from pipeline.medallion import build_dim_practice, build_gold, build_silver

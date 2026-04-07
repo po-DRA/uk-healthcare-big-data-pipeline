@@ -31,7 +31,6 @@ from cloud IPs, so we bypass it entirely and filter client-side while streaming.
 from __future__ import annotations
 
 import csv
-import io
 import json
 import logging
 import os
@@ -66,10 +65,10 @@ _STREAM_TIMEOUT: float = float(os.environ.get("STREAM_TIMEOUT", "120"))
 
 # BNF chemical substance codes (field BNF_CHEMICAL_SUBSTANCE in EPD)
 DRUG_CODES: dict[str, str] = {
-    "metformin":    "0601022B0",
+    "metformin": "0601022B0",
     "atorvastatin": "0212000B0",
-    "lisinopril":   "0205051L0",
-    "salbutamol":   "0301011R0",
+    "lisinopril": "0205051L0",
+    "salbutamol": "0301011R0",
 }
 
 _NHSBSA_PACKAGE_URL = (
@@ -100,8 +99,7 @@ def _get_latest_epd_url() -> tuple[str, str]:
     with urllib.request.urlopen(_NHSBSA_PACKAGE_URL, timeout=20) as r:
         d = json.load(r)
     resources = [
-        res for res in d["result"]["resources"]
-        if res["name"].startswith("EPD_2")
+        res for res in d["result"]["resources"] if res["name"].startswith("EPD_2")
     ]
     latest = sorted(resources, key=lambda x: x["name"])[-1]
     return latest["url"], latest["name"]
@@ -139,7 +137,10 @@ def fetch_nhsbsa(drug_bnf_code: str, drug_name: str) -> dict:
     csv_url, resource_name = _get_latest_epd_url()
     _log.info(
         "Streaming NHSBSA %s for %s (%s), target %d rows",
-        resource_name, drug_name, drug_bnf_code, ROWS_PER_DRUG,
+        resource_name,
+        drug_name,
+        drug_bnf_code,
+        ROWS_PER_DRUG,
     )
 
     records: list[dict] = []
@@ -188,33 +189,38 @@ def fetch_nhsbsa(drug_bnf_code: str, drug_name: str) -> dict:
                 if row.get("UNIDENTIFIED", "").lower() == "true":
                     continue
 
-                records.append({
-                    "date":        row.get("YEAR_MONTH", ""),
-                    "actual_cost": _to_float(row.get("ACTUAL_COST")),
-                    "items":       _to_int(row.get("ITEMS")),
-                    "quantity":    _to_float(row.get("QUANTITY")),
-                    "row_id":      row.get("PRACTICE_CODE", ""),
-                    "setting":     "4",
-                    "ccg":         row.get("ICB_CODE", ""),
-                    "icb_name":    row.get("ICB_NAME", ""),
-                    "drug":        drug_name,
-                })
+                records.append(
+                    {
+                        "date": row.get("YEAR_MONTH", ""),
+                        "actual_cost": _to_float(row.get("ACTUAL_COST")),
+                        "items": _to_int(row.get("ITEMS")),
+                        "quantity": _to_float(row.get("QUANTITY")),
+                        "row_id": row.get("PRACTICE_CODE", ""),
+                        "setting": "4",
+                        "ccg": row.get("ICB_CODE", ""),
+                        "icb_name": row.get("ICB_NAME", ""),
+                        "drug": drug_name,
+                    }
+                )
 
                 if len(records) >= ROWS_PER_DRUG:
                     break
 
     _log.info(
         "%s: %d rows collected from %s (%.1f MB streamed)",
-        drug_name, len(records), resource_name, bytes_read / 1e6,
+        drug_name,
+        len(records),
+        resource_name,
+        bytes_read / 1e6,
     )
 
     payload = {
-        "drug":       drug_name,
-        "bnf_code":   drug_bnf_code,
-        "source":     "nhsbsa_epd",
-        "resource":   resource_name,
+        "drug": drug_name,
+        "bnf_code": drug_bnf_code,
+        "source": "nhsbsa_epd",
+        "resource": resource_name,
         "total_rows": len(records),
-        "records":    records,
+        "records": records,
     }
     try:
         return NHSBSAPayload.model_validate(payload).model_dump()
@@ -305,10 +311,15 @@ def fetch_nhs_pages(drug_name: str) -> dict:
         if not headings:
             text = " ".join(p.get_text(" ", strip=True) for p in main.find_all("p"))  # type: ignore[union-attr]
             bullets = [li.get_text(" ", strip=True) for li in main.find_all("li")]  # type: ignore[union-attr]
-            pages.append({
-                "url": url, "page_type": page_type,
-                "heading": "", "text": text, "bullets": bullets,
-            })
+            pages.append(
+                {
+                    "url": url,
+                    "page_type": page_type,
+                    "heading": "",
+                    "text": text,
+                    "bullets": bullets,
+                }
+            )
         else:
             for heading in headings:
                 heading_text = heading.get_text(" ", strip=True)
@@ -324,12 +335,15 @@ def fetch_nhs_pages(drug_name: str) -> dict:
                             li.get_text(" ", strip=True)
                             for li in sibling.find_all("li")
                         )
-                pages.append({
-                    "url": url, "page_type": page_type,
-                    "heading": heading_text,
-                    "text": " ".join(sibling_texts),
-                    "bullets": sibling_bullets,
-                })
+                pages.append(
+                    {
+                        "url": url,
+                        "page_type": page_type,
+                        "heading": heading_text,
+                        "text": " ".join(sibling_texts),
+                        "bullets": sibling_bullets,
+                    }
+                )
 
     _log.info("%s: %d sections extracted across NHS pages", drug_name, len(pages))
     payload = {"drug": drug_name, "type": "nhs_pages", "pages": pages}
