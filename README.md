@@ -356,7 +356,7 @@ All three are joined with a single DuckDB SQL query in script 06.
 
 **Real-world implication:** A production NHS data warehouse typically joins structured records, discharge summaries (PDF/text), waiting list exports (CSV), and live IoT sensor streams (binary). The variety challenge is not just technical (parsing) but analytical: how do you trust data from sources with fundamentally different quality guarantees?
 
-> 📖 Read more: [DuckDB - reading multiple file formats](https://duckdb.org/docs/data/overview)
+> 📖 Read more: [DuckDB - reading multiple file formats](https://duckdb.org/docs/current/data/overview)
 
 ---
 
@@ -606,7 +606,7 @@ uv run python
 2. Uses `LEAD()` to find when the next version starts - that becomes `valid_to` for the current version
 3. The most recent version has `valid_to = NULL` and `is_current = TRUE`
 
-> 📖 Read more: [Kimball Group - SCD Type 2](https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/slowly-changing-dimension-type-2/) · [Wikipedia - Slowly Changing Dimension](https://en.wikipedia.org/wiki/Slowly_changing_dimension) · [The Data Warehouse Toolkit, Kimball & Ross (book)](https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/books/data-warehouse-dw-toolkit/)
+> 📖 Read more: [Wikipedia - SCD Type 2](https://en.wikipedia.org/wiki/Slowly_changing_dimension#Type_2:_add_new_row) · [The Data Warehouse Toolkit, Kimball & Ross (book)](https://www.kimballgroup.com/)
 
 ---
 
@@ -874,9 +874,9 @@ Everything else - the architecture, the SQL, the quality checks, the SCD logic, 
 - [Apache Iceberg](https://iceberg.apache.org/) - alternative open table format used in AWS and GCP
 
 ### DuckDB
-- [DuckDB Documentation](https://duckdb.org/docs/) - complete reference
+- [DuckDB Documentation](https://duckdb.org/docs/current/) - complete reference
 - [Why DuckDB](https://duckdb.org/why_duckdb) - when in-process SQL beats a database server
-- [DuckDB JSONL performance](https://duckdb.org/docs/data/json/overview) - reading JSON and JSONL natively
+- [DuckDB JSONL performance](https://duckdb.org/docs/current/data/json/overview) - reading JSON and JSONL natively
 
 ### Polars
 - [Polars User Guide](https://docs.pola.rs/) - lazy evaluation, expressions, and performance
@@ -889,13 +889,13 @@ Everything else - the architecture, the SQL, the quality checks, the SCD logic, 
 - [Batch Processing vs Stream Processing (Estuary)](https://estuary.dev/blog/batch-processing-vs-stream-processing/) - concise comparison of trade-offs
 
 ### Slowly Changing Dimensions (SCD)
-- [Kimball Group - SCD Type 2](https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/slowly-changing-dimension-type-2/) - the definitive reference from the dimensional modelling founders
+- [Kimball Group - SCD Type 2](https://en.wikipedia.org/wiki/Slowly_changing_dimension#Type_2:_add_new_row) - the definitive reference from the dimensional modelling founders
 - [Wikipedia - Slowly Changing Dimension](https://en.wikipedia.org/wiki/Slowly_changing_dimension) - all SCD types with examples
 - *The Data Warehouse Toolkit* - Kimball & Ross (book) - the canonical textbook for dimensional modelling
 
 ### Orchestration
 - [Prefect Documentation](https://docs.prefect.io/) - flows, tasks, retries, and the UI
-- [Prefect vs Airflow](https://www.prefect.io/blog/prefect-vs-airflow) - when to choose which
+- [Prefect Quickstart](https://docs.prefect.io/v3/get-started/quickstart) - get started with flows and tasks
 
 ### NHS Open Data
 - [NHSBSA Open Data Portal](https://opendata.nhsbsa.net/) - home of the English Prescribing Dataset and other NHS open data
@@ -910,7 +910,7 @@ Everything else - the architecture, the SQL, the quality checks, the SCD logic, 
 - [dbt Tests](https://docs.getdbt.com/docs/build/tests) - SQL-based data quality assertions integrated with dbt transformations
 
 ### Lineage & Observability
-- [OpenLineage Specification](https://openlineage.io/) - vendor-neutral standard for capturing data lineage events
+- [OpenLineage Specification](https://github.com/OpenLineage/OpenLineage) - vendor-neutral standard for capturing data lineage events
 - [OpenMetadata](https://open-metadata.org/) - open-source data catalogue with native OpenLineage ingestion, column-level lineage, data quality integration, and schema metadata
 - [Prefect + OpenLineage](https://docs.prefect.io/latest/guides/openlineage/) - official Prefect integration for automatic lineage emission from flows
 
