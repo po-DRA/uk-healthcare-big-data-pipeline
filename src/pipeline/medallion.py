@@ -27,11 +27,16 @@ Bronze holds all fetched drugs (7 at time of writing).  Silver is filtered
 to ``SILVER_DRUGS`` — a curated set chosen for clinical diversity and
 analytical interest:
 
-  metformin    — highest-volume diabetes drug; cost baseline
-  semaglutide  — Ozempic/Wegovy; highest cost-per-item; major 2024-25 story
-  atorvastatin — highest-volume cardiovascular drug
-  lisinopril   — cardiovascular; contrasts with atorvastatin on cost profile
-  salbutamol   — respiratory; clinically distinct category
+  metformin     — highest-volume diabetes drug; cost baseline
+  semaglutide   — Ozempic/Wegovy; highest cost-per-item; major 2024-25 story
+  atorvastatin  — highest-volume cardiovascular statin
+  simvastatin   — older statin; contrasts cost profile with atorvastatin
+  aspirin       — antiplatelet; very high volume, very low cost-per-item
+  lisinopril    — ACE inhibitor; cardiovascular
+  lansoprazole  — proton pump inhibitor; gastro-intestinal
+  levothyroxine — thyroid hormone; long-term condition management
+  salbutamol    — respiratory; clinically distinct category
+  amoxicillin   — antibiotic; high seasonal volume (winter)
 
 Drugs left in Bronze only (available for future Silver promotion):
   liraglutide  — older GLP-1, largely superseded by semaglutide
@@ -69,8 +74,13 @@ SILVER_DRUGS: tuple[str, ...] = (
     "metformin",
     "semaglutide",
     "atorvastatin",
+    "simvastatin",
+    "aspirin",
     "lisinopril",
+    "lansoprazole",
+    "levothyroxine",
     "salbutamol",
+    "amoxicillin",
 )
 
 # SQL IN clause derived from SILVER_DRUGS — used in build_silver queries.

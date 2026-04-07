@@ -66,15 +66,23 @@ _STREAM_TIMEOUT: float = float(os.environ.get("STREAM_TIMEOUT", "120"))
 # BNF chemical substance codes (field BNF_CHEMICAL_SUBSTANCE in EPD)
 DRUG_CODES: dict[str, str] = {
     # Diabetes / weight management
-    "metformin":    "0601022B0",
-    "liraglutide":  "0601023AB",  # Saxenda (weight), Victoza (diabetes)
-    "semaglutide":  "0601023AW",  # Ozempic (diabetes), Wegovy (weight)
-    "tirzepatide":  "0601023AZ",  # Mounjaro
+    "metformin": "0601022B0",
+    "liraglutide": "0601023AB",  # Saxenda (weight), Victoza (diabetes)
+    "semaglutide": "0601023AW",  # Ozempic (diabetes), Wegovy (weight)
+    "tirzepatide": "0601023AZ",  # Mounjaro
     # Cardiovascular
     "atorvastatin": "0212000B0",
-    "lisinopril":   "0205051L0",
+    "lisinopril": "0205051L0",
+    "simvastatin": "0212000Y0",
+    "aspirin": "0209000A0",  # 75 mg antiplatelet
+    # Gastro-intestinal
+    "lansoprazole": "0103050E0",  # Proton pump inhibitor
+    # Endocrine
+    "levothyroxine": "0602010V0",  # Thyroid hormone replacement
     # Respiratory
-    "salbutamol":   "0301011R0",
+    "salbutamol": "0301011R0",
+    # Infections
+    "amoxicillin": "0501013B0",  # Broad-spectrum penicillin
 }
 
 _NHSBSA_PACKAGE_URL = (
@@ -88,11 +96,13 @@ _NHS_SLUGS = [
     "taking-{drug}-with-other-medicines-and-herbal-supplements",
 ]
 
-#: Rows to collect per drug before stopping the stream.
-#: 500 rows per drug gives meaningful ICB-level variation while keeping
-#: fetch time under 15 seconds.  Override via environment variable:
-#:   NHSBSA_ROWS_PER_DRUG=1000 uv run python scripts/01_fetch.py
-ROWS_PER_DRUG: int = int(os.environ.get("NHSBSA_ROWS_PER_DRUG", "10000"))
+#: Rows to collect per drug from the NHSBSA stream.
+#: None (default) = fetch every matching row in the monthly file — the full
+#: volume for one month is ~60-80k rows per popular drug (~500 MB total for
+#: 12 drugs).  For a capped run set the env var:
+#:   NHSBSA_ROWS_PER_DRUG=10000 uv run python scripts/01_fetch.py
+_raw_rows = os.environ.get("NHSBSA_ROWS_PER_DRUG")
+ROWS_PER_DRUG: int | None = int(_raw_rows) if _raw_rows else None
 
 
 # ---------------------------------------------------------------------------
@@ -142,11 +152,11 @@ def fetch_nhsbsa(drug_bnf_code: str, drug_name: str) -> dict:
     """
     csv_url, resource_name = _get_latest_epd_url()
     _log.info(
-        "Streaming NHSBSA %s for %s (%s), target %d rows",
+        "Streaming NHSBSA %s for %s (%s), target %s rows",
         resource_name,
         drug_name,
         drug_bnf_code,
-        ROWS_PER_DRUG,
+        ROWS_PER_DRUG if ROWS_PER_DRUG is not None else "all",
     )
 
     records: list[dict] = []
@@ -165,7 +175,7 @@ def fetch_nhsbsa(drug_bnf_code: str, drug_name: str) -> dict:
     )
 
     with urllib.request.urlopen(req, timeout=_STREAM_TIMEOUT) as r:
-        while len(records) < ROWS_PER_DRUG:
+        while ROWS_PER_DRUG is None or len(records) < ROWS_PER_DRUG:
             chunk = r.read(512 * 1024)
             if not chunk:
                 break
@@ -209,7 +219,7 @@ def fetch_nhsbsa(drug_bnf_code: str, drug_name: str) -> dict:
                     }
                 )
 
-                if len(records) >= ROWS_PER_DRUG:
+                if ROWS_PER_DRUG is not None and len(records) >= ROWS_PER_DRUG:
                     break
 
     _log.info(
