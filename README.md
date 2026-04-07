@@ -16,9 +16,9 @@ You will build a complete pipeline that fetches NHS prescribing records and clin
 
 1. Fork this repo → click **Code → Codespaces → Create codespace on master**
 2. Wait ~2 minutes for setup to complete
-3. In the terminal: `uv run pytest` — all tests should pass
+3. In the terminal: `uv run pytest` - all tests should pass
 4. Run the first script: `uv run python scripts/01_fetch.py`
-5. Follow the **[Lab Guide (LABS.md)](LABS.md)** — 8 labs in order, ~4-5 hours total
+5. Follow the **[Lab Guide (LABS.md)](LABS.md)** - 8 labs in order, ~4-5 hours total
 
 **Local setup:** `git clone` → `uv sync --all-groups` → `uv run pytest`
 
@@ -54,7 +54,7 @@ You will build a complete pipeline that fetches NHS prescribing records and clin
 
 ## What You Will Learn
 
-This course uses **numbered Python scripts** that you run from the terminal — the same workflow used by practising data engineers. Each script is self-contained, clearly commented, and builds on the files the previous script wrote.
+This course uses **numbered Python scripts** that you run from the terminal - the same workflow used by practising data engineers. Each script is self-contained, clearly commented, and builds on the files the previous script wrote.
 
 | Concept | Why it matters | What you build | Script |
 |---------|---------------|----------------|--------|
@@ -82,16 +82,16 @@ This course uses **numbered Python scripts** that you run from the terminal — 
 | NHSBSA English Prescribing Dataset (EPD) | https://opendata.nhsbsa.net/ | CSV (6.9 GB/month, streamed) | Open Government Licence v3.0 |
 | NHS.uk Medicines Pages | https://www.nhs.uk/medicines/ | HTML (scraped) | Open Government Licence v3.0 |
 
-No API keys required for either source. The NHSBSA CSV is streamed with early-exit filtering — by default all matching rows are collected per drug per month.
+No API keys required for either source. The NHSBSA CSV is streamed with early-exit filtering - by default all matching rows are collected per drug per month.
 
 ### Controlling Data Volume
 
-Bronze data is partitioned by month (`lake/{drug}/{EPD_YYYYMM}/prescribing.jsonl`). Each run of `scripts/01_fetch.py` adds new partitions without touching previous ones — Bronze is write-once per partition.
+Bronze data is partitioned by month (`lake/{drug}/{EPD_YYYYMM}/prescribing.jsonl`). Each run of `scripts/01_fetch.py` adds new partitions without touching previous ones - Bronze is write-once per partition.
 
 | Environment variable | Default | Effect |
 |---------------------|---------|--------|
 | `NHSBSA_MONTHS` | `1` | Number of monthly EPD files to fetch |
-| `NHSBSA_ROWS_PER_DRUG` | _(all rows)_ | Cap rows per drug per month — useful for quick dev runs |
+| `NHSBSA_ROWS_PER_DRUG` | _(all rows)_ | Cap rows per drug per month - useful for quick dev runs |
 
 ```bash
 # Default: latest month only, all rows per drug (~500 MB Bronze)
@@ -100,14 +100,14 @@ uv run python scripts/01_fetch.py
 # Demo / quick run: latest month, 500 rows per drug (~5 MB)
 NHSBSA_ROWS_PER_DRUG=500 uv run python scripts/01_fetch.py
 
-# 2 months of history (course demo — ~1 GB Bronze)
+# 2 months of history (course demo - ~1 GB Bronze)
 NHSBSA_MONTHS=2 uv run python scripts/01_fetch.py
 
 # Maximum local volume: 6 months, all rows (~3+ GB Bronze)
 NHSBSA_MONTHS=6 uv run python scripts/01_fetch.py
 ```
 
-Silver automatically reads across all partitions — no changes needed after adding months.
+Silver automatically reads across all partitions - no changes needed after adding months.
 
 ### The Drugs Used Throughout
 
@@ -115,16 +115,16 @@ Bronze holds all 12 drugs. Silver promotes 10 for analysis (liraglutide and tirz
 
 | Drug | BNF Code | Brand names | Indication | Layer |
 |------|----------|-------------|-----------|-------|
-| Metformin | 0601022B0 | — | Type 2 diabetes (most prescribed in England) | Bronze + Silver |
+| Metformin | 0601022B0 | - | Type 2 diabetes (most prescribed in England) | Bronze + Silver |
 | Semaglutide | 0601023AW | Ozempic, Wegovy | Weight management / Type 2 diabetes | Bronze + Silver |
-| Atorvastatin | 0212000B0 | — | High cholesterol | Bronze + Silver |
-| Simvastatin | 0212000Y0 | — | High cholesterol (older statin) | Bronze + Silver |
-| Aspirin | 0209000A0 | — | Antiplatelet (cardiovascular prevention) | Bronze + Silver |
-| Lisinopril | 0205051L0 | — | Hypertension / Heart failure | Bronze + Silver |
+| Atorvastatin | 0212000B0 | - | High cholesterol | Bronze + Silver |
+| Simvastatin | 0212000Y0 | - | High cholesterol (older statin) | Bronze + Silver |
+| Aspirin | 0209000A0 | - | Antiplatelet (cardiovascular prevention) | Bronze + Silver |
+| Lisinopril | 0205051L0 | - | Hypertension / Heart failure | Bronze + Silver |
 | Lansoprazole | 0103050E0 | Zoton | Acid reflux / Proton pump inhibitor | Bronze + Silver |
-| Levothyroxine | 0602010V0 | — | Thyroid hormone replacement | Bronze + Silver |
+| Levothyroxine | 0602010V0 | - | Thyroid hormone replacement | Bronze + Silver |
 | Salbutamol | 0301011R0 | Ventolin | Asthma / COPD | Bronze + Silver |
-| Amoxicillin | 0501013B0 | — | Broad-spectrum antibiotic (seasonal spikes) | Bronze + Silver |
+| Amoxicillin | 0501013B0 | - | Broad-spectrum antibiotic (seasonal spikes) | Bronze + Silver |
 | Liraglutide | 0601023AB | Saxenda, Victoza | Weight management / Type 2 diabetes | Bronze only |
 | Tirzepatide | 0601023AZ | Mounjaro | Type 2 diabetes / Weight management | Bronze only |
 
@@ -482,7 +482,7 @@ A **Slowly Changing Dimension** is a dimension entity (e.g. a GP practice) whose
 
 In July 2022 England's **106 Clinical Commissioning Groups (CCGs)** were dissolved and replaced by **42 Integrated Care Boards (ICBs)**. Every GP practice in England now has two valid answers to "which commissioning body are you in?" depending on when you ask.
 
-Without SCD Type 2, a query like *"how much did NHS Cornwall ICB spend on metformin in financial year 2021–22?"* would assign the ICB code to all historical records - overstating spend for newly-created ICBs and understating it for abolished CCGs.
+Without SCD Type 2, a query like *"how much did NHS Cornwall ICB spend on metformin in financial year 2021-22?"* would assign the ICB code to all historical records - overstating spend for newly-created ICBs and understating it for abolished CCGs.
 
 #### SCD Type comparison
 
@@ -521,12 +521,12 @@ WHERE practice_id = 'E84006'
 -- Returns: 03V  (the old CCG - correct for that date)
 ```
 
-Run any SQL query against `pipeline.duckdb` directly from the terminal — no database server needed.
+Run any SQL query against `pipeline.duckdb` directly from the terminal - no database server needed.
 
 **Tip:** always wrap the Python string in single quotes (`'...'`) to avoid shell quoting issues.
 
 ```bash
-# List all practice versions — see practice_id, CCG, valid dates
+# List all practice versions - see practice_id, CCG, valid dates
 uv run python -c '
 import duckdb
 duckdb.connect("pipeline.duckdb").sql("""
@@ -567,7 +567,7 @@ for r in rows:
     print(r)
 '
 
-# Point-in-time query — swap the practice_id and date for your own values
+# Point-in-time query - swap the practice_id and date for your own values
 uv run python -c '
 import duckdb
 con = duckdb.connect("pipeline.duckdb")
@@ -653,7 +653,7 @@ uv run python scripts/01_fetch.py
 | [07_stream.py](scripts/07_stream.py) | Micro-batch streaming simulation via generator + DuckDB | Velocity |
 | [08_backfill.py](scripts/08_backfill.py) | Partition-level backfill + idempotency proof | Veracity |
 
-> Run script 01 before all others — it populates `lake/` which later scripts read.
+> Run script 01 before all others - it populates `lake/` which later scripts read.
 
 ---
 
@@ -781,7 +781,7 @@ Ports forwarded:
 
 ## Taking This Pipeline to Production
 
-This codebase is a complete, working data pipeline — not a toy. The architectural patterns (medallion layers, idempotency, SCD Type 2, partitioned Bronze, backfill, lineage) are identical to what runs in production at NHS trusts and large healthcare organisations. The difference is the **execution engine**: this pipeline runs on a single machine; production pipelines run on distributed clusters.
+This codebase is a complete, working data pipeline - not a toy. The architectural patterns (medallion layers, idempotency, SCD Type 2, partitioned Bronze, backfill, lineage) are identical to what runs in production at NHS trusts and large healthcare organisations. The difference is the **execution engine**: this pipeline runs on a single machine; production pipelines run on distributed clusters.
 
 ### How This Maps to Databricks / PySpark
 
@@ -790,7 +790,7 @@ If you have seen Databricks Delta Live Tables (DLT) pipelines, this codebase cov
 | This pipeline | Databricks / PySpark equivalent | What is the same |
 |--------------|--------------------------------|-----------------|
 | `lake/{drug}/{EPD_YYYYMM}/prescribing.jsonl` | Delta Lake table on S3/ADLS, partitioned by `year_month` | Write-once Bronze, partition-per-month pattern |
-| `build_silver()` in `medallion.py` (DuckDB SQL) | DLT `@dlt.table` Silver node (PySpark SQL) | TRY_CAST, null filtering, derived columns — identical logic |
+| `build_silver()` in `medallion.py` (DuckDB SQL) | DLT `@dlt.table` Silver node (PySpark SQL) | TRY_CAST, null filtering, derived columns - identical logic |
 | `build_gold()` (DuckDB aggregations) | DLT `@dlt.table` Gold node | GROUP BY aggregations, same SQL |
 | `validate_silver_task` null-rate checks | DLT Expectations (`@dlt.expect_or_drop`) | Declarative quality rules blocking bad rows |
 | `build_dim_practice()` SCD Type 2 (LEAD/PARTITION BY) | Delta `MERGE INTO` with SCD Type 2 logic | Same window function logic |
@@ -801,9 +801,9 @@ If you have seen Databricks Delta Live Tables (DLT) pipelines, this codebase cov
 
 ### Concrete Migration Path
 
-If you want to move this pipeline to Databricks, here is the sequence — each step is independently deployable:
+If you want to move this pipeline to Databricks, here is the sequence - each step is independently deployable:
 
-**Step 1 — Swap storage: JSONL → Delta Lake**
+**Step 1 - Swap storage: JSONL → Delta Lake**
 
 Replace `lake.py` writes with Delta format. The Bronze partitioning stays identical.
 
@@ -816,9 +816,9 @@ df.write.format("delta").mode("append").partitionBy("drug", "year_month") \
     .save("abfss://bronze@yourstorage.dfs.core.windows.net/prescribing")
 ```
 
-**Step 2 — Swap compute: DuckDB → PySpark**
+**Step 2 - Swap compute: DuckDB → PySpark**
 
-`medallion.py` SQL runs unchanged inside a Spark session — DuckDB SQL is ANSI-compliant.
+`medallion.py` SQL runs unchanged inside a Spark session - DuckDB SQL is ANSI-compliant.
 
 ```python
 # Current (medallion.py)
@@ -828,13 +828,13 @@ con.execute("CREATE TABLE silver.prescribing_new AS SELECT TRY_CAST(...) ...")
 spark.sql("CREATE OR REPLACE TABLE silver.prescribing AS SELECT TRY_CAST(...) ...")
 ```
 
-**Step 3 — Wrap in DLT (optional)**
+**Step 3 - Wrap in DLT (optional)**
 
 Replace the `build_silver()` / `build_gold()` functions with `@dlt.table` decorators. Databricks handles orchestration, retries, and lineage automatically.
 
-**Step 4 — Replace the generator with Kafka**
+**Step 4 - Replace the generator with Kafka**
 
-`prescribing_event_stream()` in `stream.py` has the same API as a Kafka consumer — the downstream DuckDB/Spark write logic does not change.
+`prescribing_event_stream()` in `stream.py` has the same API as a Kafka consumer - the downstream DuckDB/Spark write logic does not change.
 
 ```python
 # Current (stream.py)
@@ -845,7 +845,7 @@ consumer = KafkaConsumer("prescribing-events", ...)
 for message in consumer:  ...   # same batch processing logic
 ```
 
-**Step 5 — Connect Gold to Power BI / Tableau**
+**Step 5 - Connect Gold to Power BI / Tableau**
 
 Gold tables (`gold.drug_summary`, `gold.drug_monthly_spend`, `gold.practice_leaderboard`) are already aggregated and BI-ready. In Databricks, expose them via SQL Warehouse; locally, connect Power BI Desktop directly to `pipeline.duckdb` using the DuckDB ODBC driver.
 
@@ -853,12 +853,12 @@ Gold tables (`gold.drug_summary`, `gold.drug_monthly_spend`, `gold.practice_lead
 
 These are the things you will encounter in production that this single-node pipeline does not teach:
 
-- **Spark shuffle** — distributed joins require explicit partitioning strategies; skewed keys cause stragglers
-- **Kafka offset management** — at-least-once vs exactly-once delivery, consumer group rebalancing
-- **Cloud cost** — BigQuery slot hours, Redshift concurrency scaling, S3 egress fees — none of this is visible locally
-- **Concurrent writers** — Delta Lake handles this with optimistic concurrency; DuckDB is single-writer
+- **Spark shuffle** - distributed joins require explicit partitioning strategies; skewed keys cause stragglers
+- **Kafka offset management** - at-least-once vs exactly-once delivery, consumer group rebalancing
+- **Cloud cost** - BigQuery slot hours, Redshift concurrency scaling, S3 egress fees - none of this is visible locally
+- **Concurrent writers** - Delta Lake handles this with optimistic concurrency; DuckDB is single-writer
 
-Everything else — the architecture, the SQL, the quality checks, the SCD logic, the backfill strategy — transfers directly.
+Everything else - the architecture, the SQL, the quality checks, the SCD logic, the backfill strategy - transfers directly.
 
 ---
 
