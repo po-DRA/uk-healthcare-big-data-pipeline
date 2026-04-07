@@ -149,6 +149,35 @@ Run all steps in order. After Silver is built, the script queries `silver.prescr
 
 **Check:** The script prints row counts for Silver and each Gold table, then proves idempotency by running twice and comparing.
 
+**Exploring the DuckDB file directly**
+
+After Lab 04 you have a `pipeline.duckdb` file with all Silver and Gold tables. You can query it at any time without re-running the script:
+
+```bash
+# List all tables
+uv run python -c "import duckdb; duckdb.connect('pipeline.duckdb').sql('SHOW ALL TABLES').show()"
+
+# See the drug cost summary
+uv run python -c "import duckdb; duckdb.connect('pipeline.duckdb').sql('SELECT * FROM gold.drug_summary').show()"
+
+# Monthly spend trend
+uv run python -c "import duckdb; duckdb.connect('pipeline.duckdb').sql('SELECT * FROM gold.drug_monthly_spend ORDER BY drug, year_month').show()"
+
+# Top prescribing practices
+uv run python -c "import duckdb; duckdb.connect('pipeline.duckdb').sql('SELECT * FROM gold.practice_leaderboard LIMIT 10').show()"
+```
+
+Or start an interactive session for free-form SQL:
+
+```bash
+uv run python
+>>> import duckdb
+>>> con = duckdb.connect("pipeline.duckdb")
+>>> con.sql("SELECT drug, ROUND(avg_nic_per_item, 2) AS cost_per_item FROM gold.drug_summary ORDER BY cost_per_item DESC").show()
+```
+
+Note: `.show()` prints formatted tables directly — no pandas or pyarrow needed.
+
 ---
 
 ## Lab 05 — NLP on NHS Clinical Text
