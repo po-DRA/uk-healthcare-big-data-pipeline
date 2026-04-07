@@ -655,3 +655,79 @@ You do not need to add error handling from scratch. The pipeline already handles
 - **Dead letter logging**: write failed drug payloads to `logs/failed/` so you can replay them later rather than losing them silently.
 
 Both are two-to-five line additions to `flows/pipeline_flow.py`.
+
+---
+
+## Running with Docker
+
+The repository includes a `Dockerfile` that packages the entire pipeline into a self-contained container. The Docker image is built and validated on every push to master via GitHub Actions CI - so the build is always verified.
+
+**Why use Docker?**
+- No local Python or uv install needed
+- Identical environment on any machine (laptop, server, cloud VM)
+- Easy to hand to a colleague or deploy to a cloud container service
+
+### Build the image
+
+```bash
+docker build -t uk-healthcare-pipeline .
+```
+
+This takes 2-3 minutes the first time (downloading Python and dependencies). Subsequent builds are fast because Docker caches the dependency layer.
+
+### Test the image works
+
+```bash
+# Verify the pipeline package is importable (same check as the health check)
+docker run uk-healthcare-pipeline uv run python -c "import pipeline; print('OK')"
+
+# Run the unit tests inside the container
+docker run uk-healthcare-pipeline uv run pytest tests/ -v -m "not slow"
+```
+
+Both should complete without errors.
+
+### Run the pipeline
+
+```bash
+# Run the full pipeline - lake/ is mounted so Bronze data persists on your machine
+docker run -v "$(pwd)/lake:/app/lake" uk-healthcare-pipeline
+
+# Run with a row cap (faster, good for testing)
+docker run -v "$(pwd)/lake:/app/lake" \
+  -e NHSBSA_ROWS_PER_DRUG=500 \
+  uk-healthcare-pipeline
+
+# Run a single script instead of the full flow
+docker run -v "$(pwd)/lake:/app/lake" \
+  uk-healthcare-pipeline uv run python scripts/01_fetch.py
+```
+
+The `-v "$(pwd)/lake:/app/lake"` flag mounts your local `lake/` directory into the container so Bronze files are written to your machine and survive after the container stops.
+
+### Run with the Prefect UI
+
+The container exposes port 4200. To use the Prefect UI you need two terminals:
+
+```bash
+# Terminal 1 - start the Prefect server inside a container
+docker run -p 4200:4200 uk-healthcare-pipeline \
+  uv run prefect server start --host 0.0.0.0
+
+# Terminal 2 - run the pipeline, connecting to the server
+docker run --network host \
+  -v "$(pwd)/lake:/app/lake" \
+  -e PREFECT_API_URL=http://127.0.0.1:4200/api \
+  uk-healthcare-pipeline
+```
+
+Then open `http://localhost:4200` to see the run in the Prefect UI.
+
+### What the Dockerfile does
+
+- Starts from `python:3.11-slim` (minimal base image)
+- Copies `uv` from the official uv image for fast, reproducible installs
+- Installs all dependencies with `uv sync --frozen` (exact versions from `uv.lock`)
+- Runs as a non-root user (`appuser`) - required for Kubernetes deployments
+- Health check: `import pipeline` - confirms the package installed correctly
+- Default command: `uv run python flows/pipeline_flow.py`
