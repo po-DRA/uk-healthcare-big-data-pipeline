@@ -521,35 +521,82 @@ WHERE practice_id = 'E84006'
 -- Returns: 03V  (the old CCG - correct for that date)
 ```
 
-Run any SQL query against `pipeline.duckdb` directly from the terminal — no database server needed:
+Run any SQL query against `pipeline.duckdb` directly from the terminal — no database server needed.
+
+**Tip:** always wrap the Python string in single quotes (`'...'`) to avoid shell quoting issues.
 
 ```bash
-# List all practice versions (current and historical)
-uv run python -c "
+# List all practice versions — see practice_id, CCG, valid dates
+uv run python -c '
 import duckdb
-duckdb.connect('pipeline.duckdb').sql('''
+duckdb.connect("pipeline.duckdb").sql("""
     SELECT practice_id, ccg, setting, valid_from, valid_to, is_current
     FROM gold.dim_practice
     ORDER BY practice_id, valid_from
     LIMIT 20
-''').show()
-"
+""").show()
+'
 
-# Find a real practice_id from your data, then query its version history
-uv run python -c "
+# Count current vs historical versions
+uv run python -c '
 import duckdb
-con = duckdb.connect('pipeline.duckdb')
-# Step 1: pick any practice_id from the dimension
-pid = con.execute('SELECT practice_id FROM gold.dim_practice LIMIT 1').fetchone()[0]
-print(f'Querying practice: {pid}')
-# Step 2: point-in-time query — which CCG/ICB was this practice in on a given date?
-con.execute('''
-    SELECT ccg, valid_from, valid_to, is_current
+duckdb.connect("pipeline.duckdb").sql("""
+    SELECT
+        COUNT(*)                                        AS total_versions,
+        COUNT(DISTINCT practice_id)                     AS unique_practices,
+        SUM(CASE WHEN is_current THEN 1 ELSE 0 END)    AS current_versions,
+        SUM(CASE WHEN NOT is_current THEN 1 ELSE 0 END) AS historical_versions
     FROM gold.dim_practice
-    WHERE practice_id = ?
-    ORDER BY valid_from
-''', [pid]).show()
-"
+""").show()
+'
+
+# Pick a real practice from your data and query its full version history
+uv run python -c '
+import duckdb
+con = duckdb.connect("pipeline.duckdb")
+pid = con.execute(
+    "SELECT practice_id FROM gold.dim_practice WHERE practice_id <> chr(45) LIMIT 1"
+).fetchone()[0]
+print("Practice:", pid)
+rows = con.execute(
+    "SELECT ccg, valid_from, valid_to, is_current "
+    "FROM gold.dim_practice WHERE practice_id = ? ORDER BY valid_from",
+    [pid]
+).fetchall()
+for r in rows:
+    print(r)
+'
+
+# Point-in-time query — swap the practice_id and date for your own values
+uv run python -c '
+import duckdb
+con = duckdb.connect("pipeline.duckdb")
+pid = con.execute(
+    "SELECT practice_id FROM gold.dim_practice WHERE practice_id <> chr(45) LIMIT 1"
+).fetchone()[0]
+analysis_date = "2025-05-01"
+rows = con.execute(
+    "SELECT practice_id, ccg, valid_from, valid_to, is_current "
+    "FROM gold.dim_practice "
+    "WHERE practice_id = ? "
+    "  AND valid_from <= ? "
+    "  AND (valid_to IS NULL OR valid_to > ?)",
+    [pid, analysis_date, analysis_date]
+).fetchall()
+print(f"Practice {pid} on {analysis_date}:")
+for r in rows:
+    print(r)
+'
+```
+
+For free-form interactive SQL, start a Python session:
+
+```bash
+uv run python
+>>> import duckdb
+>>> con = duckdb.connect("pipeline.duckdb")
+>>> con.sql("SELECT * FROM gold.dim_practice LIMIT 5").show()
+>>> con.sql("SHOW ALL TABLES").show()
 ```
 
 #### How it is implemented here
