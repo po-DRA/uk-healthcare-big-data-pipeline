@@ -69,7 +69,10 @@ DB_PATH = pathlib.Path("pipeline.duckdb")
 def _print_result(rel: duckdb.DuckDBPyRelation) -> None:
     cols = [d[0] for d in rel.description]
     rows = rel.fetchall()
-    col_widths = [max(len(c), max((len(str(r[i])) for r in rows), default=0)) for i, c in enumerate(cols)]
+    col_widths = [
+        max(len(c), max((len(str(r[i])) for r in rows), default=0))
+        for i, c in enumerate(cols)
+    ]
     header = "  ".join(c.ljust(col_widths[i]) for i, c in enumerate(cols))
     print(header)
     print("  ".join("-" * w for w in col_widths))
@@ -89,7 +92,7 @@ def main() -> None:
     bronze_drugs = sorted(p.parent.name for p in prescribing_files)
     print(f"\nBronze holds {len(bronze_drugs)} drugs: {', '.join(bronze_drugs)}")
     print(f"Silver will promote {len(SILVER_DRUGS)} drugs: {', '.join(SILVER_DRUGS)}")
-    print(f"  (remaining stay in Bronze for future use)")
+    print("  (remaining stay in Bronze for future use)")
 
     print("\n[1/3] Building Silver layer...")
     silver_rows = build_silver(LAKE_DIR, DB_PATH)
@@ -130,13 +133,17 @@ def main() -> None:
                    COUNT(*) FILTER (WHERE version_num > 1) AS practices_with_history
             FROM gold.dim_practice
         """).fetchone()
-        print(f"\n  gold.dim_practice: {scd2[0]} rows, "
-              f"{scd2[1]} practices with CCG->ICB history")
+        print(
+            f"\n  gold.dim_practice: {scd2[0]} rows, "
+            f"{scd2[1]} practices with CCG->ICB history"
+        )
 
     print(f"\nDone. DuckDB file: {DB_PATH.resolve()}")
-    print("Query it directly: uv run python -c \"import duckdb; "
-          "con=duckdb.connect('pipeline.duckdb'); "
-          "print(con.execute('SHOW TABLES').pl())\"")
+    print(
+        'Query it directly: uv run python -c "import duckdb; '
+        "con=duckdb.connect('pipeline.duckdb'); "
+        "print(con.execute('SHOW TABLES').pl())\""
+    )
 
 
 if __name__ == "__main__":

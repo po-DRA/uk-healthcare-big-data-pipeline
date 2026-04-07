@@ -124,7 +124,8 @@ def build_silver(
     int
         Number of rows written to ``silver.prescribing``.
     """
-    glob_pattern = str(lake_dir / "*" / "prescribing.jsonl")
+    # Bronze is month-partitioned: lake/{drug}/{EPD_YYYYMM}/prescribing.jsonl
+    glob_pattern = str(lake_dir / "*" / "*" / "prescribing.jsonl")
     with duckdb.connect(str(db_path)) as con:
         _ensure_schemas(con)
 
@@ -264,7 +265,8 @@ def build_silver_for_range(
         )
         print(f"Backfilled {rows:,} rows for 2023-01 → 2023-12")
     """
-    glob_pattern = str(lake_dir / "*" / "prescribing.jsonl")
+    # Bronze is month-partitioned: lake/{drug}/{EPD_YYYYMM}/prescribing.jsonl
+    glob_pattern = str(lake_dir / "*" / "*" / "prescribing.jsonl")
 
     with duckdb.connect(str(db_path)) as con:
         _ensure_schemas(con)

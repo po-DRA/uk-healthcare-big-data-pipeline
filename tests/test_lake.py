@@ -7,6 +7,7 @@ All tests use tmp_path (pytest fixture) so nothing is written to the real lake.
 from __future__ import annotations
 
 import json
+import pathlib
 
 import pytest
 
@@ -20,6 +21,7 @@ PRESCRIBING_PAYLOAD = {
     "drug": "metformin",
     "bnf_code": "0601022B0",
     "type": "nhsbsa_epd",
+    "resource": "EPD_202506",
     "total_rows": 2,
     "records": [
         {"date": "2024-01-01", "actual_cost": 100.0, "items": 10, "quantity": 500.0,
@@ -28,6 +30,9 @@ PRESCRIBING_PAYLOAD = {
          "row_id": "A81001-2024-02-01", "setting": 4, "ccg": "03V", "drug": "metformin"},
     ],
 }
+
+# Partition path used in path assertions below
+_PRESCRIBING_JSONL = pathlib.Path("metformin") / "EPD_202506" / "prescribing.jsonl"
 
 NHS_PAGES_PAYLOAD = {
     "drug": "metformin",
@@ -46,23 +51,23 @@ NHS_PAGES_PAYLOAD = {
 
 def test_write_lake_prescribing_returns_path(tmp_path):
     out = write_lake(PRESCRIBING_PAYLOAD, tmp_path)
-    assert out == tmp_path / "metformin" / "prescribing.jsonl"
+    assert out == tmp_path / _PRESCRIBING_JSONL
 
 
 def test_write_lake_prescribing_file_exists(tmp_path):
     write_lake(PRESCRIBING_PAYLOAD, tmp_path)
-    assert (tmp_path / "metformin" / "prescribing.jsonl").exists()
+    assert (tmp_path / _PRESCRIBING_JSONL).exists()
 
 
 def test_write_lake_prescribing_correct_line_count(tmp_path):
     write_lake(PRESCRIBING_PAYLOAD, tmp_path)
-    lines = (tmp_path / "metformin" / "prescribing.jsonl").read_text().splitlines()
+    lines = (tmp_path / _PRESCRIBING_JSONL).read_text().splitlines()
     assert len(lines) == 2
 
 
 def test_write_lake_prescribing_lines_are_valid_json(tmp_path):
     write_lake(PRESCRIBING_PAYLOAD, tmp_path)
-    lines = (tmp_path / "metformin" / "prescribing.jsonl").read_text().splitlines()
+    lines = (tmp_path / _PRESCRIBING_JSONL).read_text().splitlines()
     for line in lines:
         record = json.loads(line)
         assert "date" in record
@@ -70,7 +75,7 @@ def test_write_lake_prescribing_lines_are_valid_json(tmp_path):
 
 def test_write_lake_prescribing_no_tmp_file_left(tmp_path):
     write_lake(PRESCRIBING_PAYLOAD, tmp_path)
-    tmp_files = list((tmp_path / "metformin").glob("*.tmp"))
+    tmp_files = list((tmp_path / "metformin").rglob("*.tmp"))
     assert tmp_files == []
 
 
@@ -202,7 +207,7 @@ def test_lake_summary_returns_entries_for_each_file(tmp_path):
     write_lake(NHS_PAGES_PAYLOAD, tmp_path)
     summary = lake_summary(tmp_path)
     filenames = [s["file"] for s in summary]
-    assert "prescribing.jsonl" in filenames
+    assert any("prescribing.jsonl" in f for f in filenames)
     assert "nhs_pages.json" in filenames
 
 

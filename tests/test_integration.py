@@ -55,8 +55,8 @@ def bronze_lake(tmp_path: pathlib.Path) -> pathlib.Path:
     met_records = [r for r in _BRONZE_RECORDS if r["drug"] == "metformin"]
     ato_records = [r for r in _BRONZE_RECORDS if r["drug"] == "atorvastatin"]
 
-    write_lake({"drug": "metformin",    "type": "nhsbsa_epd", "records": met_records}, tmp_path)
-    write_lake({"drug": "atorvastatin", "type": "nhsbsa_epd", "records": ato_records}, tmp_path)
+    write_lake({"drug": "metformin",    "type": "nhsbsa_epd", "resource": "EPD_202506", "records": met_records}, tmp_path)
+    write_lake({"drug": "atorvastatin", "type": "nhsbsa_epd", "resource": "EPD_202506", "records": ato_records}, tmp_path)
     return tmp_path
 
 
@@ -164,12 +164,12 @@ def test_full_pipeline_idempotent(bronze_lake, pipeline_db):
 def test_silver_nic_per_item_zero_items_is_null(tmp_path):
     """nic_per_item must be NULL (not inf) when items = 0."""
     lake = tmp_path / "lake"
-    drug_dir = lake / "metformin"
-    drug_dir.mkdir(parents=True)
+    partition_dir = lake / "metformin" / "EPD_202506"
+    partition_dir.mkdir(parents=True)
     record = {"date": "2024-01-01", "actual_cost": 100.0, "items": 0,
               "quantity": 0.0, "row_id": "X001", "setting": "4",
               "ccg": "03V", "drug": "metformin"}
-    with (drug_dir / "prescribing.jsonl").open("w") as fh:
+    with (partition_dir / "prescribing.jsonl").open("w") as fh:
         fh.write(json.dumps(record) + "\n")
 
     db = tmp_path / "test.duckdb"

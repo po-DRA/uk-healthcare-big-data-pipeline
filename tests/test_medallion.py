@@ -38,15 +38,15 @@ SYNTHETIC_RECORDS = [
 
 @pytest.fixture()
 def lake_dir(tmp_path: pathlib.Path) -> pathlib.Path:
-    """Minimal Bronze lake: two drug subdirectories with JSONL files."""
-    met_dir = tmp_path / "metformin"
-    met_dir.mkdir()
+    """Minimal Bronze lake: two drug subdirectories with month-partitioned JSONL files."""
+    met_dir = tmp_path / "metformin" / "EPD_202506"
+    met_dir.mkdir(parents=True)
     with (met_dir / "prescribing.jsonl").open("w") as fh:
         for rec in SYNTHETIC_RECORDS[:4]:  # includes the both-null row
             fh.write(json.dumps(rec) + "\n")
 
-    ato_dir = tmp_path / "atorvastatin"
-    ato_dir.mkdir()
+    ato_dir = tmp_path / "atorvastatin" / "EPD_202506"
+    ato_dir.mkdir(parents=True)
     with (ato_dir / "prescribing.jsonl").open("w") as fh:
         for rec in SYNTHETIC_RECORDS[4:]:
             fh.write(json.dumps(rec) + "\n")
@@ -268,8 +268,8 @@ SCD_RECORDS = [
 @pytest.fixture()
 def scd_db(tmp_path: pathlib.Path) -> pathlib.Path:
     """Lake with a CCG-changing practice; Silver already built."""
-    met_dir = tmp_path / "metformin"
-    met_dir.mkdir()
+    met_dir = tmp_path / "metformin" / "EPD_202506"
+    met_dir.mkdir(parents=True)
     with (met_dir / "prescribing.jsonl").open("w") as fh:
         for rec in SCD_RECORDS:
             fh.write(json.dumps(rec) + "\n")

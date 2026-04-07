@@ -23,12 +23,24 @@ file formats coexisting under the same lake/ directory tree.
 Lake directory layout (Bronze):
     lake/
     ├── metformin/
-    │   ├── prescribing.jsonl   ← structured (one record per line)
-    │   └── nhs_pages.json      ← unstructured (full JSON document)
+    │   ├── EPD_202506/
+    │   │   └── prescribing.jsonl   ← one partition per monthly EPD file
+    │   ├── EPD_202505/
+    │   │   └── prescribing.jsonl
+    │   └── nhs_pages.json          ← NHS pages stay at drug level (not monthly)
     ├── atorvastatin/
-    │   ├── prescribing.jsonl
+    │   ├── EPD_202506/
+    │   │   └── prescribing.jsonl
     │   └── nhs_pages.json
     ...
+
+Month-partitioned Bronze
+------------------------
+EPD data is partitioned by the NHSBSA resource name (e.g. ``EPD_202506``).
+Each monthly run writes a new partition without touching previous months —
+Bronze is write-once per partition.  Silver reads across all partitions with
+a ``lake/*/*/prescribing.jsonl`` glob.  This mirrors cloud lake patterns:
+    s3://bucket/drug=metformin/year_month=2025-06/part-0000.jsonl
 """
 
 from __future__ import annotations
@@ -70,7 +82,10 @@ def write_lake(payload: dict, base_dir: pathlib.Path) -> pathlib.Path:
     drug_dir.mkdir(parents=True, exist_ok=True)
 
     if data_type in ("nhsbsa_epd", "openprescribing"):
-        out_path = drug_dir / "prescribing.jsonl"
+        resource = payload.get("resource", "")
+        partition_dir = (drug_dir / resource) if resource else drug_dir
+        partition_dir.mkdir(parents=True, exist_ok=True)
+        out_path = partition_dir / "prescribing.jsonl"
         tmp_path = out_path.with_suffix(".jsonl.tmp")
         try:
             with tmp_path.open("w", encoding="utf-8") as fh:
@@ -133,9 +148,15 @@ def read_lake(
     drug_dir = base_dir / drug
 
     if data_type in ("nhsbsa_epd", "openprescribing"):
-        path = drug_dir / "prescribing.jsonl"
-        with path.open("r", encoding="utf-8") as fh:
-            return [json.loads(line) for line in fh if line.strip()]
+        # Read across all month partitions (lake/{drug}/{resource}/prescribing.jsonl)
+        # plus the legacy flat file (lake/{drug}/prescribing.jsonl) for compatibility.
+        records: list[dict] = []
+        for jsonl_path in sorted(drug_dir.rglob("prescribing.jsonl")):
+            with jsonl_path.open("r", encoding="utf-8") as fh:
+                records.extend(json.loads(line) for line in fh if line.strip())
+        if not records:
+            raise FileNotFoundError(f"No prescribing.jsonl found under {drug_dir}")
+        return records
 
     elif data_type == "nhs_pages":
         path = drug_dir / "nhs_pages.json"
@@ -167,12 +188,15 @@ def lake_summary(base_dir: pathlib.Path) -> list[dict]:
     for drug_dir in sorted(base_dir.iterdir()):
         if not drug_dir.is_dir():
             continue
-        for file in sorted(drug_dir.iterdir()):
-            size = file.stat().st_size
+        for item in sorted(drug_dir.rglob("*")):
+            if item.is_dir():
+                continue
+            rel = item.relative_to(drug_dir)
+            size = item.stat().st_size
             summary.append(
                 {
                     "drug": drug_dir.name,
-                    "file": file.name,
+                    "file": str(rel),
                     "size_bytes": size,
                     "size_kb": round(size / 1024, 1),
                 }

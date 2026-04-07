@@ -110,24 +110,35 @@ ROWS_PER_DRUG: int | None = int(_raw_rows) if _raw_rows else None
 # ---------------------------------------------------------------------------
 
 
-def _get_latest_epd_url() -> tuple[str, str]:
-    """Return (csv_url, resource_name) for the most recent EPD monthly file."""
+def _get_epd_urls(n_months: int = 1) -> list[tuple[str, str]]:
+    """Return [(csv_url, resource_name), ...] for the last n_months EPD files.
+
+    NHSBSA publishes one CSV per calendar month.  Sorting by name (EPD_YYYYMM)
+    gives chronological order — the last n_months entries are the most recent.
+    """
     with urllib.request.urlopen(_NHSBSA_PACKAGE_URL, timeout=20) as r:
         d = json.load(r)
-    resources = [
-        res for res in d["result"]["resources"] if res["name"].startswith("EPD_2")
-    ]
-    latest = sorted(resources, key=lambda x: x["name"])[-1]
-    return latest["url"], latest["name"]
+    resources = sorted(
+        [res for res in d["result"]["resources"] if res["name"].startswith("EPD_2")],
+        key=lambda x: x["name"],
+    )
+    return [(res["url"], res["name"]) for res in resources[-n_months:]]
 
 
 @_RETRY
-def fetch_nhsbsa(drug_bnf_code: str, drug_name: str) -> dict:
-    """Fetch monthly NHS prescribing records for one drug from NHSBSA EPD.
+def fetch_nhsbsa(
+    drug_bnf_code: str,
+    drug_name: str,
+    *,
+    csv_url: str | None = None,
+    resource_name: str | None = None,
+) -> dict:
+    """Fetch one month of NHS prescribing records for one drug from NHSBSA EPD.
 
-    Streams the latest monthly EPD CSV file and collects rows matching
-    ``drug_bnf_code``.  Stops early once ``ROWS_PER_DRUG`` rows are collected —
-    no need to read the full 6-7 GB file.
+    Streams an EPD monthly CSV file and collects rows matching ``drug_bnf_code``.
+    If ``csv_url`` / ``resource_name`` are omitted the most recent monthly file
+    is used automatically — convenient for one-shot fetches.  Pass explicit
+    values (from ``_get_epd_urls``) when fetching multiple months.
 
     Demonstrates **Volume** (18 million rows per monthly file) and
     **Velocity** (monthly refresh cycle from NHS BSA).
@@ -138,6 +149,11 @@ def fetch_nhsbsa(drug_bnf_code: str, drug_name: str) -> dict:
         BNF chemical substance code, e.g. ``"0601022B0"`` for metformin.
     drug_name:
         Human-readable drug name used as a label in the returned payload.
+    csv_url:
+        Direct URL to the EPD CSV file.  If None, the latest is fetched.
+    resource_name:
+        EPD resource identifier, e.g. ``"EPD_202506"``.  If None, derived
+        from the latest resource.
 
     Returns
     -------
@@ -145,12 +161,13 @@ def fetch_nhsbsa(drug_bnf_code: str, drug_name: str) -> dict:
         - ``drug``       : str
         - ``bnf_code``   : str
         - ``source``     : str — always ``"nhsbsa_epd"``
-        - ``resource``   : str — e.g. ``"EPD_202506"``
+        - ``resource``   : str — e.g. ``"EPD_202506"`` (used as lake partition)
         - ``total_rows`` : int — rows collected
         - ``records``    : list[dict] — date, actual_cost, items, quantity,
                            row_id, setting, ccg, icb_name, drug
     """
-    csv_url, resource_name = _get_latest_epd_url()
+    if csv_url is None or resource_name is None:
+        csv_url, resource_name = _get_epd_urls(n_months=1)[0]
     _log.info(
         "Streaming NHSBSA %s for %s (%s), target %s rows",
         resource_name,

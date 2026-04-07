@@ -79,7 +79,9 @@ def main() -> None:
                 "WHERE year_month BETWEEN ? AND ?",
                 [BACKFILL_FROM, BACKFILL_TO],
             ).fetchone()
-            total_before = con.execute("SELECT COUNT(*) FROM silver.prescribing").fetchone()
+            total_before = con.execute(
+                "SELECT COUNT(*) FROM silver.prescribing"
+            ).fetchone()
         except Exception:
             print("Silver table not found. Run scripts/04_medallion.py first.")
             return
@@ -87,21 +89,22 @@ def main() -> None:
     rows_in_window_before = (before or (0,))[0]
     total_before_count = (total_before or (0,))[0]
 
-    print(f"\nBackfill: silver.prescribing WHERE year_month BETWEEN {BACKFILL_FROM} AND {BACKFILL_TO}")
-    print(f"\nBefore backfill:")
+    print(
+        f"\nBackfill: silver.prescribing WHERE year_month BETWEEN {BACKFILL_FROM} AND {BACKFILL_TO}"
+    )
+    print("\nBefore backfill:")
     print(f"  Total Silver rows:          {total_before_count:,}")
     print(f"  Rows in target window:      {rows_in_window_before:,}")
 
-    print(f"\nRunning backfill...")
-    print(f"  Step 1: DELETE rows in window")
-    print(f"  Step 2: INSERT re-derived rows from Bronze")
+    print("\nRunning backfill...")
+    print("  Step 1: DELETE rows in window")
+    print("  Step 2: INSERT re-derived rows from Bronze")
 
     inserted = build_silver_for_range(LAKE_DIR, DB_PATH, BACKFILL_FROM, BACKFILL_TO)
 
     with duckdb.connect(str(DB_PATH)) as con:
         after = con.execute(
-            "SELECT COUNT(*) FROM silver.prescribing "
-            "WHERE year_month BETWEEN ? AND ?",
+            "SELECT COUNT(*) FROM silver.prescribing WHERE year_month BETWEEN ? AND ?",
             [BACKFILL_FROM, BACKFILL_TO],
         ).fetchone()
         total_after = con.execute("SELECT COUNT(*) FROM silver.prescribing").fetchone()
@@ -109,18 +112,20 @@ def main() -> None:
     rows_in_window_after = (after or (0,))[0]
     total_after_count = (total_after or (0,))[0]
 
-    print(f"\nAfter backfill:")
+    print("\nAfter backfill:")
     print(f"  Total Silver rows:          {total_after_count:,}")
     print(f"  Rows in target window:      {rows_in_window_after:,}")
     print(f"  Rows inserted by backfill:  {inserted:,}")
 
-    print(f"\nIdempotency proof — running again...")
-    inserted_again = build_silver_for_range(LAKE_DIR, DB_PATH, BACKFILL_FROM, BACKFILL_TO)
+    print("\nIdempotency proof — running again...")
+    inserted_again = build_silver_for_range(
+        LAKE_DIR, DB_PATH, BACKFILL_FROM, BACKFILL_TO
+    )
     print(f"  Rows inserted on second run: {inserted_again:,}")
     assert inserted_again == inserted, "Idempotency violated!"
-    print(f"  Same result — idempotent.")
+    print("  Same result — idempotent.")
 
-    print(f"\nRebuilding Gold from updated Silver...")
+    print("\nRebuilding Gold from updated Silver...")
     gold_counts = build_gold(DB_PATH)
     for table, count in gold_counts.items():
         print(f"  {table}: {count:,} rows")

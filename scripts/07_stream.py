@@ -59,7 +59,6 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
 
 import duckdb
 
-from pipeline.fetch import DRUG_CODES
 from pipeline.stream import stream_into_duckdb
 
 LAKE_DIR = pathlib.Path("lake")
@@ -68,12 +67,17 @@ LAKE_DIR = pathlib.Path("lake")
 def _print_result(rel: duckdb.DuckDBPyRelation) -> None:
     cols = [d[0] for d in rel.description]
     rows = rel.fetchall()
-    col_widths = [max(len(c), max((len(str(r[i])) for r in rows), default=0)) for i, c in enumerate(cols)]
+    col_widths = [
+        max(len(c), max((len(str(r[i])) for r in rows), default=0))
+        for i, c in enumerate(cols)
+    ]
     header = "  ".join(c.ljust(col_widths[i]) for i, c in enumerate(cols))
     print(header)
     print("  ".join("-" * w for w in col_widths))
     for row in rows:
         print("  ".join(str(v).ljust(col_widths[i]) for i, v in enumerate(row)))
+
+
 DB_PATH = pathlib.Path("pipeline.duckdb")
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "100"))
 STREAM_DRUG = "metformin"  # stream one drug for the demo
@@ -92,15 +96,23 @@ def main() -> None:
 
     result = stream_into_duckdb(LAKE_DIR, STREAM_DRUG, DB_PATH, batch_size=BATCH_SIZE)
 
-    print(f"\nStream complete:")
+    print("\nStream complete:")
     print(f"  Drug:         {result['drug']}")
     print(f"  Batches:      {result['total_batches']}")
     print(f"  Total rows:   {result['total_records']:,}")
-    print(f"  Total items:  {result['total_items']:,}" if result['total_items'] else "  Total items:  N/A")
-    print(f"  Total cost:   £{result['total_cost_gbp']:,.2f}" if result['total_cost_gbp'] else "  Total cost:   N/A")
+    print(
+        f"  Total items:  {result['total_items']:,}"
+        if result["total_items"]
+        else "  Total items:  N/A"
+    )
+    print(
+        f"  Total cost:   £{result['total_cost_gbp']:,.2f}"
+        if result["total_cost_gbp"]
+        else "  Total cost:   N/A"
+    )
 
     # Show the streaming table mid-snapshot
-    print(f"\nStreaming table snapshot (streaming.live_prescribing):")
+    print("\nStreaming table snapshot (streaming.live_prescribing):")
     with duckdb.connect(str(DB_PATH)) as con:
         df = con.execute(f"""
             SELECT

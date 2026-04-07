@@ -40,7 +40,6 @@ import duckdb
 import polars as pl
 
 from pipeline.visualise import (
-    figure_to_bytes,
     plot_cost_per_item,
     plot_items_by_drug,
     plot_monthly_trend,
@@ -76,7 +75,7 @@ def main() -> None:
         summary_df = _to_polars(con.execute("SELECT * FROM gold.drug_summary"))
         monthly_df = _to_polars(con.execute("SELECT * FROM gold.drug_monthly_spend"))
 
-    print(f"\nGold data loaded:")
+    print("\nGold data loaded:")
     print(f"  drug_summary: {len(summary_df)} drugs")
     print(f"  drug_monthly_spend: {len(monthly_df)} drug-month rows")
 
@@ -95,9 +94,7 @@ def main() -> None:
     print(f"  Saved: outputs/{fname2}")
 
     # Chart 3: Monthly trend for the highest-cost drug
-    highest_cost_drug = (
-        summary_df.sort("total_cost_gbp", descending=True)["drug"][0]
-    )
+    highest_cost_drug = summary_df.sort("total_cost_gbp", descending=True)["drug"][0]
     print(f"Generating chart 3: Monthly trend for {highest_cost_drug}...")
     fig3 = plot_monthly_trend(monthly_df, drug=highest_cost_drug)
     fname3 = report_filename(f"monthly_trend_{highest_cost_drug}")
