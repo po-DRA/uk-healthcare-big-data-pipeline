@@ -12,12 +12,30 @@ Teaching points
 ---------------
 - Bronze is write-once: you never transform the raw files in place.
   If something goes wrong you can always re-derive Silver/Gold from Bronze.
-- Silver is the trust boundary: the data here is typed, null-checked, and
-  deduplicated — safe to hand to an analyst without warnings.
+- Silver is the trust boundary AND a deliberate analytical choice.
+  Not every Bronze drug is promoted to Silver — ``SILVER_DRUGS`` defines
+  which drugs are in scope for analysis.  The rest stay in Bronze and can
+  be promoted later without re-fetching.
 - Gold answers specific business questions: these tables are what you'd
   connect to Power BI, Tableau, or a REST API.
 - DuckDB schemas (``silver``, ``gold``) give us namespace separation inside
   a single ``pipeline.duckdb`` file — no separate database server required.
+
+Bronze → Silver drug filter
+---------------------------
+Bronze holds all fetched drugs (7 at time of writing).  Silver is filtered
+to ``SILVER_DRUGS`` — a curated set chosen for clinical diversity and
+analytical interest:
+
+  metformin    — highest-volume diabetes drug; cost baseline
+  semaglutide  — Ozempic/Wegovy; highest cost-per-item; major 2024-25 story
+  atorvastatin — highest-volume cardiovascular drug
+  lisinopril   — cardiovascular; contrasts with atorvastatin on cost profile
+  salbutamol   — respiratory; clinically distinct category
+
+Drugs left in Bronze only (available for future Silver promotion):
+  liraglutide  — older GLP-1, largely superseded by semaglutide
+  tirzepatide  — Mounjaro; very new, low volumes in some monthly files
 
 Usage
 -----
@@ -43,6 +61,20 @@ import pathlib
 import duckdb
 
 _log = logging.getLogger(__name__)
+
+# Drugs promoted from Bronze to Silver.
+# Bronze holds all fetched drugs; Silver is a deliberate analytical subset.
+# To add a drug: fetch its Bronze files then add its name here.
+SILVER_DRUGS: tuple[str, ...] = (
+    "metformin",
+    "semaglutide",
+    "atorvastatin",
+    "lisinopril",
+    "salbutamol",
+)
+
+# SQL IN clause derived from SILVER_DRUGS — used in build_silver queries.
+_SILVER_DRUGS_SQL = ", ".join(f"'{d}'" for d in SILVER_DRUGS)
 
 
 def _ensure_schemas(con: duckdb.DuckDBPyConnection) -> None:
@@ -130,8 +162,10 @@ def build_silver(
                 format      = 'newline_delimited',
                 auto_detect = true
             )
+            -- Silver drug filter: promote only the curated analytical subset
+            WHERE drug IN ({_SILVER_DRUGS_SQL})
             -- Drop rows where both cost AND items are NULL — analytically worthless
-            WHERE NOT (actual_cost IS NULL AND items IS NULL)
+            AND NOT (actual_cost IS NULL AND items IS NULL)
             """
         )
 
@@ -290,7 +324,8 @@ def build_silver_for_range(
                 auto_detect = true
             )
             WHERE
-                NOT (actual_cost IS NULL AND items IS NULL)
+                drug IN ({_SILVER_DRUGS_SQL})
+                AND NOT (actual_cost IS NULL AND items IS NULL)
                 AND STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')
                     BETWEEN '{from_month}' AND '{to_month}'
             """,

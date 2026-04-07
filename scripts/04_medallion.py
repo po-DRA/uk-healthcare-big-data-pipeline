@@ -55,7 +55,12 @@ sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
 
 import duckdb
 
-from pipeline.medallion import build_dim_practice, build_gold, build_silver
+from pipeline.medallion import (
+    SILVER_DRUGS,
+    build_dim_practice,
+    build_gold,
+    build_silver,
+)
 
 LAKE_DIR = pathlib.Path("lake")
 DB_PATH = pathlib.Path("pipeline.duckdb")
@@ -81,10 +86,16 @@ def main() -> None:
     print(f"\nDatabase: {DB_PATH.resolve()}")
 
     # --- Silver ---
+    bronze_drugs = sorted(p.parent.name for p in prescribing_files)
+    print(f"\nBronze holds {len(bronze_drugs)} drugs: {', '.join(bronze_drugs)}")
+    print(f"Silver will promote {len(SILVER_DRUGS)} drugs: {', '.join(SILVER_DRUGS)}")
+    print(f"  (remaining stay in Bronze for future use)")
+
     print("\n[1/3] Building Silver layer...")
     silver_rows = build_silver(LAKE_DIR, DB_PATH)
     print(f"  silver.prescribing: {silver_rows:,} rows")
     print("  Transformations applied:")
+    print("    - Drug filter: only SILVER_DRUGS promoted from Bronze")
     print("    - TRY_CAST to proper types (date, float, int)")
     print("    - Derived column: nic_per_item = actual_cost / NULLIF(items, 0)")
     print("    - Derived column: year_month (for partitioning)")

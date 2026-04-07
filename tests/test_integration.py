@@ -164,11 +164,11 @@ def test_full_pipeline_idempotent(bronze_lake, pipeline_db):
 def test_silver_nic_per_item_zero_items_is_null(tmp_path):
     """nic_per_item must be NULL (not inf) when items = 0."""
     lake = tmp_path / "lake"
-    drug_dir = lake / "testdrug"
+    drug_dir = lake / "metformin"
     drug_dir.mkdir(parents=True)
     record = {"date": "2024-01-01", "actual_cost": 100.0, "items": 0,
               "quantity": 0.0, "row_id": "X001", "setting": "4",
-              "ccg": "03V", "drug": "testdrug"}
+              "ccg": "03V", "drug": "metformin"}
     with (drug_dir / "prescribing.jsonl").open("w") as fh:
         fh.write(json.dumps(record) + "\n")
 
