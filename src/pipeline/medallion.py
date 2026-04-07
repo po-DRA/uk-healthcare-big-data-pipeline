@@ -163,7 +163,12 @@ def build_silver(
                 )                                                            AS nic_per_item,
 
                 -- Derived: "YYYY-MM" partition key for monthly aggregations
-                STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')                   AS year_month,
+                -- NHSBSA date field is YYYYMM (e.g. 202506); test fixtures use
+                -- ISO dates (2024-01-01). COALESCE tries YYYYMM first, then ISO.
+                COALESCE(
+                    STRFTIME(TRY_STRPTIME(CAST(date AS VARCHAR), '%Y%m'), '%Y-%m'),
+                    STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')
+                )                                                            AS year_month,
 
                 -- Audit: when was this Silver table last rebuilt?
                 now()                                                        AS ingested_at
