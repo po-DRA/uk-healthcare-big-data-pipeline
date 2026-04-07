@@ -149,6 +149,84 @@ Run all steps in order. After Silver is built, the script queries `silver.prescr
 
 **Check:** The script prints row counts for Silver and each Gold table, then proves idempotency by running twice and comparing.
 
+**Verifying SCD Type 2**
+
+Query the dimension to see how many practice versions exist:
+
+```bash
+uv run python -c "
+import duckdb
+con = duckdb.connect('pipeline.duckdb')
+
+print('--- All practice versions (current) ---')
+con.sql('''
+    SELECT
+        COUNT(*)                        AS total_versions,
+        COUNT(DISTINCT practice_id)     AS unique_practices,
+        SUM(CASE WHEN is_current THEN 1 ELSE 0 END) AS current_versions,
+        SUM(CASE WHEN NOT is_current THEN 1 ELSE 0 END) AS historical_versions
+    FROM gold.dim_practice
+''').show()
+"
+```
+
+You will see `historical_versions = 0`. This is expected — the data you fetched is from 2025, after the July 2022 CCG → ICB reorganisation. Every practice already exists in its current ICB form, so no practice has two versions.
+
+To see SCD Type 2 actually create a historical row, inject a synthetic old version of a practice directly into Silver and rebuild the dimension:
+
+```bash
+uv run python -c "
+import duckdb, pathlib
+con = duckdb.connect('pipeline.duckdb')
+
+# Pick a real row_id and its current CCG from Silver
+# (row_id is used as practice_id in the SCD2 dimension)
+row = con.sql('SELECT DISTINCT row_id, ccg FROM silver.prescribing LIMIT 1').fetchone()
+row_id, current_ccg = row
+old_ccg = 'OLD001'  # fictional previous CCG
+
+print(f'Practice {row_id}: injecting old CCG {old_ccg} -> current CCG {current_ccg}')
+
+# Insert a synthetic historical record — same row_id, different CCG, earlier date
+con.execute('''
+    INSERT INTO silver.prescribing
+    SELECT
+        DATE '2021-06-01' AS date,
+        actual_cost,
+        items,
+        quantity,
+        row_id,
+        setting,
+        ? AS ccg,
+        drug,
+        nic_per_item,
+        '2021-06' AS year_month,
+        NOW() AS ingested_at
+    FROM silver.prescribing
+    WHERE row_id = ?
+    LIMIT 1
+''', [old_ccg, row_id])
+
+# Rebuild the SCD2 dimension from updated Silver
+from pipeline.medallion import build_dim_practice
+rows = build_dim_practice(pathlib.Path('pipeline.duckdb'))
+print(f'dim_practice now has {rows} rows')
+
+# Show both versions of this practice
+rows = con.execute(
+    'SELECT practice_id, ccg, valid_from, valid_to, is_current '
+    'FROM gold.dim_practice WHERE practice_id = ? ORDER BY valid_from',
+    [row_id]
+).fetchall()
+for r in rows:
+    print(r)
+"
+```
+
+You should see **two rows** for that practice: the historical version (`is_current = FALSE`, `valid_to` set to when the new CCG took over) and the current version (`is_current = TRUE`, `valid_to = NULL`). That is SCD Type 2 working correctly.
+
+Re-run `scripts/04_medallion.py` afterwards to rebuild Silver and Gold cleanly from Bronze.
+
 **Customising the tables for your reporting needs**
 
 The medallion architecture is designed to be changed — but changes flow downward only:
