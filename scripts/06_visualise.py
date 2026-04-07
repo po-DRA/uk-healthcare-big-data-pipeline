@@ -58,7 +58,7 @@ def main() -> None:
         return
 
     with duckdb.connect(str(DB_PATH), read_only=True) as con:
-        tables = [r[0] for r in con.execute("SHOW TABLES").fetchall()]
+        tables = [r[2] for r in con.execute("SHOW ALL TABLES").fetchall()]
 
     if "drug_summary" not in tables:
         print("Gold tables not found. Run scripts/04_medallion.py first.")
