@@ -96,11 +96,11 @@ Run SQL queries directly on the JSONL files that Lab 01 wrote. Try changing the 
 **What you will learn**
 
 - **DuckDB** can query JSONL files directly — no loading into pandas, no database server, no schema setup
-- Glob patterns let you query all four drug files in one SQL statement: `read_ndjson('lake/*/prescribing.jsonl')`
+- Glob patterns let you query all drug files in one SQL statement: `read_ndjson('lake/*/*/prescribing.jsonl')`
 - This is the same pattern used in cloud data lakes (S3 + Athena, GCS + BigQuery) — DuckDB is just doing it locally
 - **The Bronze layer**: raw data stored exactly as received, never modified
 
-**Check:** You should see row counts and a top-ICBs-by-cost table across all four drugs.
+**Check:** You should see row counts and a top-ICBs-by-cost table across all drugs in your Bronze lake.
 
 ---
 
@@ -145,7 +145,7 @@ Run all steps in order. After Silver is built, the script queries `silver.prescr
   - Silver: cleaned, typed, deduplicated — the "single source of truth"
   - Gold: aggregated for a specific analytical use case
 - **Idempotency**: running `build_silver()` twice gives the same result as running it once — essential for re-runs and backfills
-- **SCD Type 2**: the 2022 NHS reorganisation merged 135 CCGs into 42 ICBs. A GP practice now has two rows in `dim_practice` — one for before July 2022, one for after. Without SCD2, your historical cost reports would be wrong.
+- **SCD Type 2**: the 2022 NHS reorganisation merged 106 CCGs into 42 ICBs. A GP practice now has two rows in `dim_practice` — one for before July 2022, one for after. Without SCD2, your historical cost reports would be wrong.
 
 **Check:** The script prints row counts for Silver and each Gold table, then proves idempotency by running twice and comparing.
 
@@ -236,7 +236,7 @@ Run the script and look at the term-frequency tables for each drug. Notice which
 - How unstructured clinical prose (NHS.uk patient pages) can be turned into structured signals
 - Basic NLP: tokenisation, stop-word removal, term frequency
 - Why Variety is hard: the prescribing data has clean columns; the clinical text is free prose that needs parsing before any analysis is possible
-- A real clinical insight: metformin's top terms cluster around "diabetes/blood sugar"; salbutamol's around "breathing/inhaler"
+- A real clinical insight: metformin's top terms cluster around "sugar/blood/vitamin"; amoxicillin's around "skin/allergic/serious" — terms that reflect real prescribing risk signals
 
 **Check:** You should see a frequency table per drug with recognisable clinical terminology.
 
@@ -287,6 +287,39 @@ Run the script. Edit `BATCH_SIZE` at the top of the file and re-run to see how i
 
 **Check:** You should see DuckDB row counts incrementing micro-batch by micro-batch, with per-batch timing.
 
+Query the streaming table before and after to confirm rows were inserted:
+
+```bash
+# Before running — table does not exist yet (will error) or shows 0 rows from a prior run
+uv run python -c "
+import duckdb
+con = duckdb.connect('pipeline.duckdb')
+try:
+    con.sql('SELECT COUNT(*) AS rows_before FROM streaming.live_prescribing').show()
+except Exception:
+    print('streaming.live_prescribing does not exist yet — run the script first')
+"
+
+# Run the stream
+uv run python scripts/07_stream.py
+
+# After running — confirm total rows and how many batches were written
+uv run python -c "
+import duckdb
+con = duckdb.connect('pipeline.duckdb')
+con.sql('''
+    SELECT
+        COUNT(*)                    AS total_rows,
+        COUNT(DISTINCT batch_num)   AS total_batches,
+        MIN(arrived_at)             AS first_arrived,
+        MAX(arrived_at)             AS last_arrived
+    FROM streaming.live_prescribing
+''').show()
+"
+```
+
+You should see `total_rows` match the printed summary and `total_batches` equal `total_rows / BATCH_SIZE` (rounded up).
+
 ---
 
 ## Lab 08 — Backfill
@@ -321,8 +354,18 @@ Now that you understand each step individually, run the whole pipeline end-to-en
 uv run prefect server start
 
 # Terminal 2 — run the pipeline (open http://localhost:4200 to watch it)
+export PREFECT_API_URL=http://127.0.0.1:4200/api
 uv run python flows/pipeline_flow.py
 ```
+
+**Codespaces users:** the Prefect UI needs one extra step to connect correctly. Stop the server, then restart with your Codespace URL:
+
+```bash
+PREFECT_UI_API_URL=https://<your-codespace-name>-4200.app.github.dev/api \
+  uv run prefect server start
+```
+
+Replace `<your-codespace-name>` with the hostname shown in your browser's address bar (e.g. `zany-barnacle-wrwpwq4pp77c5jw9`).
 
 What happens automatically:
 

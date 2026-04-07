@@ -141,7 +141,7 @@ flowchart TD
         B["NHS.uk Pages\nunstructured HTML"]
     end
 
-    C["ThreadPoolExecutor\n8 parallel tasks"]
+    C["ThreadPoolExecutor\n24 parallel tasks"]
 
     subgraph bronze["🥉 Bronze Layer · lake/"]
         D["prescribing.jsonl\none record per line"]
@@ -164,7 +164,7 @@ flowchart TD
     end
 
     L["nlp_terms.jsonl\nNLP extraction\n(script 05)"]
-    M["outputs/clinical_insight.png\n(script 06)"]
+    M["outputs/*.png\nitems · cost · trend charts\n(script 06)"]
     O["OpenLineage Events\nbuild_silver · build_gold\n(log or OpenMetadata backend)"]
     P["Backfill\nbuild_silver_for_range()\n(script 08)"]
 
@@ -200,14 +200,14 @@ sequenceDiagram
 
     Dev->>PF: uv run python flows/pipeline_flow.py
 
-    par Parallel fetch - 8 tasks
-        PF->>API: fetch_nhsbsa() ×7 drugs
+    par Parallel fetch - 24 tasks
+        PF->>API: fetch_nhsbsa() ×12 drugs
     and
-        PF->>NHS: fetch_nhs_pages() ×7 drugs
+        PF->>NHS: fetch_nhs_pages() ×12 drugs
     end
 
-    API-->>Bronze: prescribing.jsonl ×7 drugs
-    NHS-->>Bronze: nhs_pages.json ×7 drugs
+    API-->>Bronze: prescribing.jsonl ×12 drugs
+    NHS-->>Bronze: nhs_pages.json ×12 drugs
 
     PF->>DB: build_silver()
     Note over DB: silver.prescribing created<br/>typed · null-checked · audited
@@ -594,7 +594,7 @@ uv run python flows/pipeline_flow.py
 Open **http://localhost:4200** to watch the pipeline run in real time, see task retries, and inspect structured logs.
 
 The Prefect flow runs all steps in order:
-1. Parallel fetch (14 tasks - 7 drugs × 2 sources: NHSBSA EPD + NHS.uk) - payloads validated against Pydantic contracts
+1. Parallel fetch (24 tasks - 12 drugs × 2 sources: NHSBSA EPD + NHS.uk) - payloads validated against Pydantic contracts
 2. Write to Bronze lake
 3. Polars transformation + veracity report
 4. Build Silver layer (`silver.prescribing`) - lineage event emitted

@@ -78,7 +78,7 @@ def main() -> None:
 
         print(f"\n  {drug.upper()} — top 10 terms:")
         print(f"  {'Term':<20} {'Frequency':>9}  Page type")
-        print(f"  {'-'*20} {'-'*9}  {'-'*20}")
+        print(f"  {'-' * 20} {'-' * 9}  {'-' * 20}")
         for row in df.iter_rows(named=True):
             print(f"  {row['term']:<20} {row['frequency']:>9}  {row['page_type']}")
 
