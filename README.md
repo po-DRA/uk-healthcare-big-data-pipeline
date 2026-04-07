@@ -84,14 +84,17 @@ This course uses **numbered Python scripts** that you run from the terminal — 
 
 No API keys required for either source. The NHSBSA CSV is streamed with early-exit filtering — only ~46 MB is read to collect 500 rows per drug.
 
-### The Four Drugs Used Throughout
+### The Drugs Used Throughout
 
-| Drug | BNF Code | Indication |
-|------|----------|-----------|
-| Metformin | 0601022B0 | Type 2 diabetes (most prescribed drug in England) |
-| Atorvastatin | 0212000B0 | High cholesterol |
-| Lisinopril | 0205051L0 | Hypertension / Heart failure |
-| Salbutamol | 0301011R0 | Asthma / COPD |
+| Drug | BNF Code | Brand names | Indication |
+|------|----------|-------------|-----------|
+| Metformin | 0601022B0 | — | Type 2 diabetes (most prescribed drug in England) |
+| Liraglutide | 0601023AB | Saxenda, Victoza | Weight management / Type 2 diabetes |
+| Semaglutide | 0601023AW | Ozempic, Wegovy | Weight management / Type 2 diabetes |
+| Tirzepatide | 0601023AZ | Mounjaro | Type 2 diabetes / Weight management |
+| Atorvastatin | 0212000B0 | — | High cholesterol |
+| Lisinopril | 0205051L0 | — | Hypertension / Heart failure |
+| Salbutamol | 0301011R0 | Ventolin | Asthma / COPD |
 
 ---
 
@@ -166,13 +169,13 @@ sequenceDiagram
     Dev->>PF: uv run python flows/pipeline_flow.py
 
     par Parallel fetch - 8 tasks
-        PF->>API: fetch_nhsbsa() ×4 drugs
+        PF->>API: fetch_nhsbsa() ×7 drugs
     and
-        PF->>NHS: fetch_nhs_pages() ×4 drugs
+        PF->>NHS: fetch_nhs_pages() ×7 drugs
     end
 
-    API-->>Bronze: prescribing.jsonl ×4 drugs
-    NHS-->>Bronze: nhs_pages.json ×4 drugs
+    API-->>Bronze: prescribing.jsonl ×7 drugs
+    NHS-->>Bronze: nhs_pages.json ×7 drugs
 
     PF->>DB: build_silver()
     Note over DB: silver.prescribing created<br/>typed · null-checked · audited
@@ -282,7 +285,7 @@ The 4 V's are the canonical framework for characterising big data challenges. Ea
 
 #### Volume - data too large for a spreadsheet
 
-NHS England processes **~1.1 billion prescription items per year** (NHS BSA, 2024). This pipeline pulls ~1 million practice-month records for just four drugs. Excel's row limit (1,048,576) would be exceeded by a single drug's history.
+NHS England processes **~1.1 billion prescription items per year** (NHS BSA, 2024). This pipeline pulls ~1 million practice-month records for seven drugs. Excel's row limit (1,048,576) would be exceeded by a single drug's history.
 
 **How this pipeline handles it:** DuckDB queries the raw JSONL files in-place using predicate pushdown - it reads only the rows and columns needed. Polars `scan_ndjson()` returns a `LazyFrame` that describes *what* to compute without reading anything from disk until `.collect()` is called.
 
@@ -559,7 +562,7 @@ uv run python flows/pipeline_flow.py
 Open **http://localhost:4200** to watch the pipeline run in real time, see task retries, and inspect structured logs.
 
 The Prefect flow runs all steps in order:
-1. Parallel fetch (8 tasks - 4 drugs × 2 sources: NHSBSA EPD + NHS.uk) - payloads validated against Pydantic contracts
+1. Parallel fetch (14 tasks - 7 drugs × 2 sources: NHSBSA EPD + NHS.uk) - payloads validated against Pydantic contracts
 2. Write to Bronze lake
 3. Polars transformation + veracity report
 4. Build Silver layer (`silver.prescribing`) - lineage event emitted

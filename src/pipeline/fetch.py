@@ -65,10 +65,16 @@ _STREAM_TIMEOUT: float = float(os.environ.get("STREAM_TIMEOUT", "120"))
 
 # BNF chemical substance codes (field BNF_CHEMICAL_SUBSTANCE in EPD)
 DRUG_CODES: dict[str, str] = {
-    "metformin": "0601022B0",
+    # Diabetes / weight management
+    "metformin":    "0601022B0",
+    "liraglutide":  "0601023AB",  # Saxenda (weight), Victoza (diabetes)
+    "semaglutide":  "0601023AW",  # Ozempic (diabetes), Wegovy (weight)
+    "tirzepatide":  "0601023AZ",  # Mounjaro
+    # Cardiovascular
     "atorvastatin": "0212000B0",
-    "lisinopril": "0205051L0",
-    "salbutamol": "0301011R0",
+    "lisinopril":   "0205051L0",
+    # Respiratory
+    "salbutamol":   "0301011R0",
 }
 
 _NHSBSA_PACKAGE_URL = (
@@ -86,7 +92,7 @@ _NHS_SLUGS = [
 #: 500 rows per drug gives meaningful ICB-level variation while keeping
 #: fetch time under 15 seconds.  Override via environment variable:
 #:   NHSBSA_ROWS_PER_DRUG=1000 uv run python scripts/01_fetch.py
-ROWS_PER_DRUG: int = int(os.environ.get("NHSBSA_ROWS_PER_DRUG", "500"))
+ROWS_PER_DRUG: int = int(os.environ.get("NHSBSA_ROWS_PER_DRUG", "10000"))
 
 
 # ---------------------------------------------------------------------------

@@ -43,7 +43,7 @@ uv run python scripts/01_fetch.py
 
 **What you will do**
 
-Watch the output as data is fetched for four drugs (metformin, atorvastatin, lisinopril, salbutamol) concurrently from NHSBSA and NHS.uk.
+Watch the output as data is fetched for seven drugs (metformin, liraglutide, semaglutide, tirzepatide, atorvastatin, lisinopril, salbutamol) concurrently from NHSBSA and NHS.uk.
 
 **What you will learn**
 
