@@ -288,7 +288,7 @@ NHS England processes **~1.1 billion prescription items per year** (NHS BSA, 202
 
 **Real-world implication:** A dashboard that loads the full dataset into a Python list before filtering will run out of memory at scale. Lazy evaluation and column pruning are not optional at NHS scale - they are requirements.
 
-> 📖 Read more: [IBM - The 4 V's of Big Data](https://www.ibm.com/think/topics/4-vs-of-big-data) · [Polars Lazy API](https://docs.pola.rs/user-guide/lazy/)
+> 📖 Read more: [What is Big Data? (IBM)](https://www.ibm.com/think/topics/big-data) · [Polars Lazy API](https://docs.pola.rs/user-guide/lazy/)
 
 ---
 
@@ -303,7 +303,7 @@ NHS BSA publishes prescribing data **monthly**, but real-time NHS systems - NHS 
 
 **Real-world implication:** An NHS 111 surge detection system cannot wait for a nightly batch job. Streaming micro-batch processing (Kafka, Redpanda, Kinesis, or the generator pattern here) reduces latency from hours to seconds.
 
-> 📖 Read more: [Streaming 101 - Tyler Akidau, O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) · [Apache Kafka Introduction](https://kafka.apache.org/intro) · [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/)
+> 📖 Read more: [Streaming vs Batch Processing in 2026 (Landskill)](https://www.landskill.com/blog/streaming-vs-batch-processing/) · [Apache Kafka Introduction](https://kafka.apache.org/intro) · [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/)
 
 ---
 
@@ -319,9 +319,9 @@ This pipeline ingests from two sources in three formats - all in the same pipeli
 
 All three are joined with a single DuckDB SQL query in script 06.
 
-**Real-world implication:** An NHS hospital data warehouse typically joins HL7 FHIR records (JSON), discharge summaries (PDF/text), waiting list exports (CSV), and live IoT sensor streams (binary). The variety challenge is not just technical (parsing) but analytical: how do you trust data from sources with fundamentally different quality guarantees?
+**Real-world implication:** A production NHS data warehouse typically joins structured records, discharge summaries (PDF/text), waiting list exports (CSV), and live IoT sensor streams (binary). The variety challenge is not just technical (parsing) but analytical: how do you trust data from sources with fundamentally different quality guarantees?
 
-> 📖 Read more: [HL7 FHIR Overview](https://hl7.org/fhir/overview.html) · [DuckDB - reading multiple file formats](https://duckdb.org/docs/data/overview)
+> 📖 Read more: [DuckDB - reading multiple file formats](https://duckdb.org/docs/data/overview)
 
 ---
 
@@ -436,7 +436,7 @@ This is the same parameter you tune in Spark Structured Streaming (`trigger(proc
 
 All four use cases are a natural fit for **Redpanda** as the broker: low-latency ingestion, Kafka-compatible consumers (Spark Structured Streaming, Flink, ksqlDB), and straightforward single-node deployment for a trust-level proof of concept before scaling out.
 
-> 📖 Read more: [Streaming 101 - O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) · [Kafka Quickstart](https://kafka.apache.org/quickstart) · [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/)
+> 📖 Read more: [Streaming vs Batch Processing in 2026 (Landskill)](https://www.landskill.com/blog/streaming-vs-batch-processing/) · [Kafka Quickstart](https://kafka.apache.org/quickstart) · [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/)
 ---
 
 ### 4. Slowly Changing Dimensions (SCD Type 2)
@@ -669,7 +669,7 @@ Ports forwarded:
 ## Further Reading
 
 ### The 4 V's of Big Data
-- [IBM - The 4 V's of Big Data](https://www.ibm.com/think/topics/4-vs-of-big-data) - accessible conceptual overview
+- [What is Big Data? (IBM)](https://www.ibm.com/think/topics/big-data) - accessible conceptual overview
 - [Data Quality in Healthcare - NHS Digital](https://digital.nhs.uk/data-and-information/data-tools-and-services/data-services/data-quality) - how Veracity is approached in the NHS
 
 ### Medallion Architecture
@@ -687,10 +687,10 @@ Ports forwarded:
 - [Polars vs Pandas](https://docs.pola.rs/user-guide/migration/pandas/) - when to switch and why
 
 ### Streaming
-- [The World Beyond Batch: Streaming 101 - Tyler Akidau, O'Reilly](https://www.oreilly.com/radar/the-world-beyond-batch-streaming-101/) - the best conceptual introduction to streaming
+- [Streaming vs Batch Processing in 2026 (Landskill)](https://www.landskill.com/blog/streaming-vs-batch-processing/) - micro-batching, event pipelines, and trade-offs
 - [Apache Kafka Introduction](https://kafka.apache.org/intro) - the industry-standard message broker
 - [Redpanda Quickstart](https://docs.redpanda.com/current/get-started/quick-start/) - Kafka-compatible broker, no ZooKeeper, easier to operate; well-suited for single-trust or on-prem NHS deployments
-- [httpx Streaming Responses](https://www.python-httpx.org/quickstart/#streaming-responses) - HTTP-level chunked streaming
+- [Batch Processing vs Stream Processing (Estuary)](https://estuary.dev/blog/batch-processing-vs-stream-processing/) - concise comparison of trade-offs
 
 ### Slowly Changing Dimensions (SCD)
 - [Kimball Group - SCD Type 2](https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/slowly-changing-dimension-type-2/) - the definitive reference from the dimensional modelling founders
@@ -703,7 +703,7 @@ Ports forwarded:
 
 ### NHS Open Data
 - [NHSBSA Open Data Portal](https://opendata.nhsbsa.net/) - home of the English Prescribing Dataset and other NHS open data
-- [NHSBSA EPD Documentation](https://www.nhsbsa.nhs.uk/statistical-collections/english-prescribing-dataset-epd) - field definitions, BNF codes, and release schedule
+- [NHSBSA EPD Documentation](https://www.nhsbsa.nhs.uk/prescription-data/prescribing-data/english-prescribing-data-epd) - field definitions, BNF codes, and release schedule
 - [NHS Digital - Data and Information](https://digital.nhs.uk/data-and-information) - secondary uses and hospital episode statistics
 - [OpenPrescribing](https://openprescribing.net/) - aggregated prescribing explorer built on the same NHSBSA data (useful for cross-checking your results)
 
