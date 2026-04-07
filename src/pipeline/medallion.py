@@ -346,8 +346,10 @@ def build_silver_for_range(
             WHERE
                 drug IN ({_SILVER_DRUGS_SQL})
                 AND NOT (actual_cost IS NULL AND items IS NULL)
-                AND STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')
-                    BETWEEN '{from_month}' AND '{to_month}'
+                AND COALESCE(
+                        STRFTIME(TRY_STRPTIME(CAST(date AS VARCHAR), '%Y%m'), '%Y-%m'),
+                        STRFTIME(TRY_CAST(date AS DATE), '%Y-%m')
+                    ) BETWEEN '{from_month}' AND '{to_month}'
             """,
         )
 
