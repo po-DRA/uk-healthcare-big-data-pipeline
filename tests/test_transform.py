@@ -37,15 +37,15 @@ SYNTHETIC_RECORDS = [
 def lake_dir(tmp_path: pathlib.Path) -> pathlib.Path:
     """Create a minimal lake structure with two drug JSONL files."""
     # metformin
-    met_dir = tmp_path / "metformin"
-    met_dir.mkdir()
+    met_dir = tmp_path / "metformin" / "EPD_202506"
+    met_dir.mkdir(parents=True)
     with (met_dir / "prescribing.jsonl").open("w") as fh:
         for rec in SYNTHETIC_RECORDS[:3]:
             fh.write(json.dumps(rec) + "\n")
 
     # atorvastatin
-    ato_dir = tmp_path / "atorvastatin"
-    ato_dir.mkdir()
+    ato_dir = tmp_path / "atorvastatin" / "EPD_202506"
+    ato_dir.mkdir(parents=True)
     with (ato_dir / "prescribing.jsonl").open("w") as fh:
         for rec in SYNTHETIC_RECORDS[3:]:
             fh.write(json.dumps(rec) + "\n")

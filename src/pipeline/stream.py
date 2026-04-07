@@ -115,12 +115,14 @@ def prescribing_event_stream(
     This is a *replay* stream — it reads existing Bronze data.  In production,
     replace this generator with a Kafka consumer or an SSE reader.
     """
-    path = lake_dir / drug / "prescribing.jsonl"
-    if not path.exists():
+    # Use the latest month partition available for this drug
+    partitions = sorted((lake_dir / drug).glob("*/prescribing.jsonl"))
+    if not partitions:
         raise FileNotFoundError(
-            f"Bronze lake file not found: {path}. "
+            f"Bronze lake file not found for {drug!r}. "
             "Run the fetch pipeline first (scripts/01_fetch.py or pipeline_flow.py)."
         )
+    path = partitions[-1]  # latest month alphabetically (EPD_YYYYMM sorts correctly)
 
     batch: list[dict] = []
     with path.open(encoding="utf-8") as fh:

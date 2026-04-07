@@ -36,8 +36,8 @@ _RECORDS = [
 @pytest.fixture()
 def lake_dir(tmp_path: pathlib.Path) -> pathlib.Path:
     """Bronze lake with a single metformin JSONL file."""
-    drug_dir = tmp_path / "metformin"
-    drug_dir.mkdir()
+    drug_dir = tmp_path / "metformin" / "EPD_202506"
+    drug_dir.mkdir(parents=True)
     with (drug_dir / "prescribing.jsonl").open("w") as fh:
         for rec in _RECORDS:
             fh.write(json.dumps(rec) + "\n")
@@ -101,8 +101,8 @@ def test_stream_file_not_found_raises(tmp_path):
 
 def test_stream_empty_lines_skipped(tmp_path):
     """Blank lines in JSONL must be skipped without error."""
-    drug_dir = tmp_path / "metformin"
-    drug_dir.mkdir()
+    drug_dir = tmp_path / "metformin" / "EPD_202506"
+    drug_dir.mkdir(parents=True)
     with (drug_dir / "prescribing.jsonl").open("w") as fh:
         fh.write(json.dumps(_RECORDS[0]) + "\n")
         fh.write("\n")  # blank line

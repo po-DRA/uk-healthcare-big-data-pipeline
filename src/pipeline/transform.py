@@ -42,7 +42,7 @@ def build_prescribing_df(lake_dir: pathlib.Path) -> pl.LazyFrame:
     -----
     Does **not** call ``.collect()`` — callers decide when to materialise.
     """
-    glob_pattern = str(lake_dir / "*" / "prescribing.jsonl")
+    glob_pattern = str(lake_dir / "*" / "*" / "prescribing.jsonl")
 
     return (
         pl.scan_ndjson(glob_pattern)
