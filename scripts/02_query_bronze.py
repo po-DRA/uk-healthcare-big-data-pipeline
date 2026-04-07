@@ -43,6 +43,17 @@ import duckdb
 LAKE_DIR = pathlib.Path("lake")
 
 
+def _print_result(rel: duckdb.DuckDBPyRelation) -> None:
+    cols = [d[0] for d in rel.description]
+    rows = rel.fetchall()
+    col_widths = [max(len(c), max((len(str(r[i])) for r in rows), default=0)) for i, c in enumerate(cols)]
+    header = "  ".join(c.ljust(col_widths[i]) for i, c in enumerate(cols))
+    print(header)
+    print("  ".join("-" * w for w in col_widths))
+    for row in rows:
+        print("  ".join(str(v).ljust(col_widths[i]) for i, v in enumerate(row)))
+
+
 def main() -> None:
     jsonl_glob = str(LAKE_DIR / "*" / "prescribing.jsonl")
 
@@ -69,8 +80,8 @@ def main() -> None:
             FROM read_ndjson('{jsonl_glob}', ignore_errors=true)
             GROUP BY drug
             ORDER BY drug
-        """).pl()
-        print(result)
+        """)
+        _print_result(result)
 
         # --- Query 2: top 5 ICBs by total cost across all drugs ---
         print("\n" + "=" * 55)
@@ -87,8 +98,8 @@ def main() -> None:
             GROUP BY ccg
             ORDER BY total_cost_gbp DESC
             LIMIT 5
-        """).pl()
-        print(result2)
+        """)
+        _print_result(result2)
 
         # --- Query 3: cross-drug cost-per-item comparison ---
         print("\n" + "=" * 55)
@@ -103,8 +114,8 @@ def main() -> None:
             FROM read_ndjson('{jsonl_glob}', ignore_errors=true)
             GROUP BY drug
             ORDER BY avg_cost_per_item_gbp DESC
-        """).pl()
-        print(result3)
+        """)
+        _print_result(result3)
 
     print("\nDone. No files were modified — Bronze is read-only.")
 

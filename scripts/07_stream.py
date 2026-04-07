@@ -63,6 +63,17 @@ from pipeline.fetch import DRUG_CODES
 from pipeline.stream import stream_into_duckdb
 
 LAKE_DIR = pathlib.Path("lake")
+
+
+def _print_result(rel: duckdb.DuckDBPyRelation) -> None:
+    cols = [d[0] for d in rel.description]
+    rows = rel.fetchall()
+    col_widths = [max(len(c), max((len(str(r[i])) for r in rows), default=0)) for i, c in enumerate(cols)]
+    header = "  ".join(c.ljust(col_widths[i]) for i, c in enumerate(cols))
+    print(header)
+    print("  ".join("-" * w for w in col_widths))
+    for row in rows:
+        print("  ".join(str(v).ljust(col_widths[i]) for i, v in enumerate(row)))
 DB_PATH = pathlib.Path("pipeline.duckdb")
 BATCH_SIZE = int(os.environ.get("BATCH_SIZE", "100"))
 STREAM_DRUG = "metformin"  # stream one drug for the demo
@@ -102,8 +113,8 @@ def main() -> None:
             GROUP BY batch_num
             ORDER BY batch_num
             LIMIT 10
-        """).pl()
-        print(df)
+        """)
+        _print_result(df)
         total_batches = result["total_batches"]
         if total_batches > 10:
             print(f"  ... ({total_batches - 10} more batches not shown)")

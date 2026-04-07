@@ -37,6 +37,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
 
 import duckdb
+import polars as pl
 
 from pipeline.visualise import (
     figure_to_bytes,
@@ -67,9 +68,13 @@ def main() -> None:
     OUTPUT_DIR.mkdir(exist_ok=True)
 
     with duckdb.connect(str(DB_PATH), read_only=True) as con:
-        # Load Gold data as Polars DataFrames
-        summary_df = con.execute("SELECT * FROM gold.drug_summary").pl()
-        monthly_df = con.execute("SELECT * FROM gold.drug_monthly_spend").pl()
+        # Load Gold data as Polars DataFrames via fetchall + schema
+        def _to_polars(rel: duckdb.DuckDBPyRelation) -> pl.DataFrame:
+            cols = [d[0] for d in rel.description]
+            return pl.DataFrame(rel.fetchall(), schema=cols, orient="row")
+
+        summary_df = _to_polars(con.execute("SELECT * FROM gold.drug_summary"))
+        monthly_df = _to_polars(con.execute("SELECT * FROM gold.drug_monthly_spend"))
 
     print(f"\nGold data loaded:")
     print(f"  drug_summary: {len(summary_df)} drugs")
@@ -101,7 +106,7 @@ def main() -> None:
 
     print(f"\nAll charts saved to {OUTPUT_DIR.resolve()}")
     print("\nGold summary:")
-    print(summary_df.select(["drug", "total_items", "total_cost_gbp", "avg_cost_per_item"]))
+    print(summary_df[["drug", "total_items", "total_cost_gbp", "avg_cost_per_item"]])
 
 
 if __name__ == "__main__":

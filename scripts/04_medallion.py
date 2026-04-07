@@ -61,6 +61,17 @@ LAKE_DIR = pathlib.Path("lake")
 DB_PATH = pathlib.Path("pipeline.duckdb")
 
 
+def _print_result(rel: duckdb.DuckDBPyRelation) -> None:
+    cols = [d[0] for d in rel.description]
+    rows = rel.fetchall()
+    col_widths = [max(len(c), max((len(str(r[i])) for r in rows), default=0)) for i, c in enumerate(cols)]
+    header = "  ".join(c.ljust(col_widths[i]) for i, c in enumerate(cols))
+    print(header)
+    print("  ".join("-" * w for w in col_widths))
+    for row in rows:
+        print("  ".join(str(v).ljust(col_widths[i]) for i, v in enumerate(row)))
+
+
 def main() -> None:
     prescribing_files = list(LAKE_DIR.glob("*/prescribing.jsonl"))
     if not prescribing_files:
@@ -100,8 +111,8 @@ def main() -> None:
                    ROUND(avg_cost_per_item, 4) AS cost_per_item
             FROM gold.drug_summary
             ORDER BY cost_gbp DESC LIMIT 3
-        """).pl()
-        print(df)
+        """)
+        _print_result(df)
 
         scd2 = con.execute("""
             SELECT COUNT(*) AS total_rows,
