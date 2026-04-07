@@ -37,6 +37,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).parent.parent / "src"))
 
 import duckdb
+import matplotlib.pyplot as plt
 import polars as pl
 
 from pipeline.visualise import (
@@ -81,29 +82,37 @@ def main() -> None:
 
     # Chart 1: Items by drug
     print("\nGenerating chart 1: Items prescribed per drug...")
-    fig1 = plot_items_by_drug(summary_df)
+    fig1, ax1 = plt.subplots(figsize=(10, 5))
+    plot_items_by_drug(summary_df, ax1)
+    fig1.tight_layout()
     fname1 = report_filename("items_by_drug")
     save_figure(fig1, OUTPUT_DIR / fname1)
+    plt.close(fig1)
     print(f"  Saved: outputs/{fname1}")
 
     # Chart 2: Cost per item
     print("Generating chart 2: Average cost per item by drug...")
-    fig2 = plot_cost_per_item(summary_df)
+    fig2, ax2 = plt.subplots(figsize=(10, 5))
+    plot_cost_per_item(summary_df, ax2)
+    fig2.tight_layout()
     fname2 = report_filename("cost_per_item")
     save_figure(fig2, OUTPUT_DIR / fname2)
+    plt.close(fig2)
     print(f"  Saved: outputs/{fname2}")
 
-    # Chart 3: Monthly trend for the highest-cost drug
-    highest_cost_drug = summary_df.sort("total_cost_gbp", descending=True)["drug"][0]
-    print(f"Generating chart 3: Monthly trend for {highest_cost_drug}...")
-    fig3 = plot_monthly_trend(monthly_df, drug=highest_cost_drug)
-    fname3 = report_filename(f"monthly_trend_{highest_cost_drug}")
+    # Chart 3: Monthly trend for all drugs
+    print("Generating chart 3: Monthly spend trend...")
+    fig3, ax3 = plt.subplots(figsize=(12, 5))
+    plot_monthly_trend(monthly_df, ax3)
+    fig3.tight_layout()
+    fname3 = report_filename("monthly_trend")
     save_figure(fig3, OUTPUT_DIR / fname3)
+    plt.close(fig3)
     print(f"  Saved: outputs/{fname3}")
 
     print(f"\nAll charts saved to {OUTPUT_DIR.resolve()}")
     print("\nGold summary:")
-    print(summary_df[["drug", "total_items", "total_cost_gbp", "avg_cost_per_item"]])
+    print(summary_df[["drug", "total_items", "total_cost_gbp", "avg_nic_per_item"]])
 
 
 if __name__ == "__main__":
