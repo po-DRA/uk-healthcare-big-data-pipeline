@@ -65,7 +65,7 @@ def write_lake(payload: dict, base_dir: pathlib.Path) -> pathlib.Path:
         If ``payload["type"]`` is not a recognised data type.
     """
     drug = payload["drug"]
-    data_type = payload["type"]
+    data_type = payload.get("type") or payload.get("source", "")
     drug_dir = base_dir / drug
     drug_dir.mkdir(parents=True, exist_ok=True)
 
