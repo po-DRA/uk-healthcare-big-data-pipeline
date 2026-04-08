@@ -864,6 +864,23 @@ Everything else - the architecture, the SQL, the quality checks, the SCD logic, 
 
 ## Further Reading
 
+### NHS Prescribing Data
+
+This pipeline uses the **NHSBSA English Prescribing Dataset (EPD)** — primary care prescribing data covering GP practices across England. A complementary dataset covers the secondary care (hospital) side:
+
+- [OpenPrescribing Hospitals (Bennett Institute, University of Oxford)](https://www.medrxiv.org/content/10.1101/2025.11.13.25340060v1) - research paper describing an open-access analytics platform for NHS hospital medicines data in England. Covers secondary care prescribing (hospital trusts) from July 2021 onwards — the same domain as this pipeline but for inpatient and outpatient hospital use rather than GP prescribing.
+
+| | This pipeline | OpenPrescribing Hospitals |
+|---|---|---|
+| Data source | NHSBSA EPD (GP prescribing) | NHS Secondary Care Medicines Data |
+| Setting | Primary care (GP practices) | Secondary care (hospital trusts) |
+| Granularity | Practice-level monthly totals | Trust-level monthly totals |
+| Access | Open Government Licence | Open access via Bennett Institute |
+
+Both datasets together give a complete picture of medicines use across the NHS.
+
+---
+
 ### The 4 V's of Big Data
 - [What is Big Data? (IBM)](https://www.ibm.com/think/topics/big-data) - accessible conceptual overview
 - [Data Quality in Healthcare - NHS Digital](https://digital.nhs.uk/data-and-information/data-tools-and-services/data-services/data-quality) - how Veracity is approached in the NHS
