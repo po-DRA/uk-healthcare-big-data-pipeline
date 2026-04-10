@@ -458,10 +458,10 @@ Open the Prefect UI at `http://localhost:4200` to see the task dependency graph,
 
 **Viewing lineage events**
 
-The pipeline emits OpenLineage events when Silver and Gold are built. By default they are logged to the terminal. To see the full structured JSON events, run a mock lineage server in one terminal and the pipeline in another:
+The pipeline emits OpenLineage events when Silver and Gold are built. By default they are logged to the terminal. To see the full structured JSON events, run a lightweight lineage receiver in one terminal and the pipeline in another:
 
 ```bash
-# Terminal 1 - start a mock lineage server on port 9999
+# Terminal 1 - start a lightweight HTTP server to receive and print lineage events
 uv run python -c "
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
@@ -475,13 +475,13 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
     def log_message(self, *a): pass
 
-print('Mock lineage server on http://localhost:9999')
+print('Lineage event receiver listening on http://localhost:9999')
 HTTPServer(('', 9999), Handler).serve_forever()
 "
 ```
 
 ```bash
-# Terminal 2 - run the pipeline pointing at the mock server
+# Terminal 2 - run the pipeline pointing at the receiver
 NHSBSA_ROWS_PER_DRUG=500 \
 OPENLINEAGE_URL=http://127.0.0.1:9999 \
 uv run python flows/pipeline_flow.py
