@@ -456,6 +456,48 @@ What happens automatically:
 
 Open the Prefect UI at `http://localhost:4200` to see the task dependency graph, retry history, and run logs.
 
+**Viewing lineage events**
+
+The pipeline emits OpenLineage events when Silver and Gold are built. By default they are logged to the terminal. To see the full structured JSON events, run a mock lineage server in one terminal and the pipeline in another:
+
+```bash
+# Terminal 1 - start a mock lineage server on port 9999
+uv run python -c "
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
+
+class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        length = int(self.headers['Content-Length'])
+        body = json.loads(self.rfile.read(length))
+        print(json.dumps(body, indent=2))
+        self.send_response(200)
+        self.end_headers()
+    def log_message(self, *a): pass
+
+print('Mock lineage server on http://localhost:9999')
+HTTPServer(('', 9999), Handler).serve_forever()
+"
+```
+
+```bash
+# Terminal 2 - run the pipeline pointing at the mock server
+NHSBSA_ROWS_PER_DRUG=500 \
+OPENLINEAGE_URL=http://127.0.0.1:9999 \
+uv run python flows/pipeline_flow.py
+```
+
+You should see 4 JSON events appear in Terminal 1:
+
+| Event | Job | Inputs | Outputs |
+|---|---|---|---|
+| START | `build_silver` | 12 Bronze JSONL files | `silver.prescribing` |
+| COMPLETE | `build_silver` | 12 Bronze JSONL files | `silver.prescribing` |
+| START | `build_gold` | `silver.prescribing` | 3 Gold tables |
+| COMPLETE | `build_gold` | `silver.prescribing` | 3 Gold tables |
+
+Each event is valid OpenLineage 1-0-5 spec format. A real backend like OpenMetadata or Marquez would receive these same events and display them as a lineage graph showing exactly which Bronze files produced which Gold tables.
+
 ---
 
 ## Run the Tests
